@@ -109,3 +109,40 @@ func TestParseUCIOutput_Empty(t *testing.T) {
 		t.Error("expected error for empty input")
 	}
 }
+
+func TestParseUCIOutput_NamedSectionsAndQuotedValues(t *testing.T) {
+	output := `
+passwall2.main=global
+passwall2.node-abcd1234='nodes'
+passwall2.node-abcd1234.type='Xray'
+passwall2.node-abcd1234.protocol='vless'
+passwall2.node-abcd1234.remarks='HK Named Node'
+passwall2.node-abcd1234.xray_address='hk.example.com'
+passwall2.node-abcd1234.xray_port='443'
+passwall2.node-abcd1234.xray_uuid='12345678-1234-1234-1234-123456789abc'
+passwall2.node-abcd1234.xray_tls='1'
+`
+
+	nodes, err := ParseUCIOutput(output)
+	if err != nil {
+		t.Fatalf("ParseUCIOutput failed: %v", err)
+	}
+	if len(nodes) != 1 {
+		t.Fatalf("expected 1 node, got %d", len(nodes))
+	}
+	if nodes[0].Name != "HK Named Node" {
+		t.Errorf("node name: expected HK Named Node, got %s", nodes[0].Name)
+	}
+	if nodes[0].Type != "Xray" {
+		t.Errorf("node type: expected Xray, got %s", nodes[0].Type)
+	}
+	if nodes[0].Address != "hk.example.com" {
+		t.Errorf("node address: expected hk.example.com, got %s", nodes[0].Address)
+	}
+	if nodes[0].Port != 443 {
+		t.Errorf("node port: expected 443, got %d", nodes[0].Port)
+	}
+	if !nodes[0].TLS {
+		t.Error("node TLS should be enabled")
+	}
+}

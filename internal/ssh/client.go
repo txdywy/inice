@@ -69,7 +69,7 @@ func Dial(host string, port int, user string, auth ssh.AuthMethod) (*Client, err
 	return &Client{conn: conn}, nil
 }
 
-const readPassWall2Command = "uci show passwall2"
+const readPassWall2Command = "/sbin/uci -q show passwall2"
 
 // ReadPassWall2 runs the only remote command this tool needs. Keep remote
 // execution narrow so inventory reads cannot grow into router mutation paths.

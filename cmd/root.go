@@ -109,8 +109,11 @@ func run(cmd *cobra.Command, args []string) error {
 	}()
 
 	fmt.Println("Reading PassWall2 configuration...")
-	uciOutput, _, err := sshClient.ReadPassWall2(ctx)
+	uciOutput, uciErrOutput, err := sshClient.ReadPassWall2(ctx)
 	if err != nil {
+		if uciErrOutput != "" {
+			return fmt.Errorf("read UCI: %w: %s", err, uciErrOutput)
+		}
 		return fmt.Errorf("read UCI: %w", err)
 	}
 	if uciOutput == "" {

@@ -10,15 +10,18 @@ import (
 )
 
 var (
-	// Matches: passwall2.@nodes[0]=nodes
-	reSection = regexp.MustCompile(`^passwall2\.@nodes\[(\d+)\]=nodes$`)
-	// Matches: passwall2.@nodes[0].type=Xray
-	reKeyVal = regexp.MustCompile(`^passwall2\.@nodes\[(\d+)\]\.(.+?)=(.+)$`)
+	// Matches anonymous and named node sections:
+	// passwall2.@nodes[0]=nodes
+	// passwall2.<section_id>=nodes
+	reSection = regexp.MustCompile(`^passwall2\.(@nodes\[\d+\]|[-A-Za-z0-9_]+)=(?:nodes?|['"]nodes?['"])$`)
+	// Matches values under anonymous and named sections:
+	// passwall2.@nodes[0].type=Xray
+	// passwall2.<section_id>.type=Xray
+	reKeyVal = regexp.MustCompile(`^passwall2\.(@nodes\[\d+\]|[-A-Za-z0-9_]+)\.(.+?)=(.*)$`)
 )
 
 // rawNode holds the raw key-value pairs for a single UCI node section.
 type rawNode struct {
-	index int
 	props map[string]string
 }
 
@@ -26,7 +29,8 @@ type rawNode struct {
 // normalized ProxyNode structs for all node-type sections found.
 func ParseUCIOutput(output string) ([]model.ProxyNode, error) {
 	lines := strings.Split(output, "\n")
-	rawMap := make(map[int]*rawNode)
+	rawMap := make(map[string]*rawNode)
+	var sectionOrder []string
 
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -36,32 +40,31 @@ func ParseUCIOutput(output string) ([]model.ProxyNode, error) {
 
 		// Check if this is a section declaration
 		if m := reSection.FindStringSubmatch(line); m != nil {
-			idx, _ := strconv.Atoi(m[1])
-			if _, exists := rawMap[idx]; !exists {
-				rawMap[idx] = &rawNode{index: idx, props: make(map[string]string)}
+			section := m[1]
+			if _, exists := rawMap[section]; !exists {
+				rawMap[section] = &rawNode{props: make(map[string]string)}
+				sectionOrder = append(sectionOrder, section)
 			}
 			continue
 		}
 
 		// Check if this is a key=value pair
 		if m := reKeyVal.FindStringSubmatch(line); m != nil {
-			idx, _ := strconv.Atoi(m[1])
+			section := m[1]
 			key := m[2]
-			value := m[3]
+			value := cleanUCIValue(m[3])
 
-			if _, exists := rawMap[idx]; !exists {
-				rawMap[idx] = &rawNode{index: idx, props: make(map[string]string)}
+			raw, exists := rawMap[section]
+			if !exists {
+				continue
 			}
-			rawMap[idx].props[key] = value
+			raw.props[key] = value
 		}
 	}
 
 	var nodes []model.ProxyNode
-	for i := 0; i < len(rawMap); i++ {
-		raw, ok := rawMap[i]
-		if !ok {
-			continue
-		}
+	for _, section := range sectionOrder {
+		raw := rawMap[section]
 		node, err := normalizeNode(raw.props)
 		if err != nil {
 			// Log warning but continue with other nodes
@@ -75,6 +78,18 @@ func ParseUCIOutput(output string) ([]model.ProxyNode, error) {
 	}
 
 	return nodes, nil
+}
+
+func cleanUCIValue(value string) string {
+	value = strings.TrimSpace(value)
+	if len(value) < 2 {
+		return value
+	}
+	if (value[0] == '\'' && value[len(value)-1] == '\'') ||
+		(value[0] == '"' && value[len(value)-1] == '"') {
+		return value[1 : len(value)-1]
+	}
+	return value
 }
 
 // normalizeNode converts raw UCI properties into a ProxyNode.
