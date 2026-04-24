@@ -6,10 +6,14 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/txdywy/inice/internal/config"
+	"github.com/txdywy/inice/internal/engine"
+	"github.com/txdywy/inice/internal/report"
+	"github.com/txdywy/inice/internal/shadow"
 	sshutil "github.com/txdywy/inice/internal/ssh"
 )
 
@@ -20,16 +24,18 @@ var (
 	routerPassword string
 	routerKeyFile  string
 	configFile     string
+	testMode       bool
+	outputFormat   string
 )
 
 var rootCmd = &cobra.Command{
 	Use:   "inice",
-	Short: "PassWall2 proxy inventory reader",
+	Short: "PassWall2 proxy inventory reader and tester",
 	Long: `inice connects to an iStoreOS router via SSH, reads PassWall2 configuration,
 and prints a read-only inventory of configured proxy nodes.
 
-This build is intentionally non-invasive: it does not write remote files,
-start remote processes, or modify PassWall2 configuration.`,
+With --test, it starts shadow sing-box proxies on the router and runs
+health checks (latency, exit IP, streaming unlock) through each node.`,
 	RunE: run,
 }
 
@@ -40,6 +46,8 @@ func init() {
 	rootCmd.Flags().StringVar(&routerPassword, "password", "", "SSH password")
 	rootCmd.Flags().StringVar(&routerKeyFile, "key-file", "", "SSH private key file path")
 	rootCmd.Flags().StringVar(&configFile, "config", "", "Config file path (default: ~/.inice.yaml)")
+	rootCmd.Flags().BoolVar(&testMode, "test", false, "Run proxy health tests through each node")
+	rootCmd.Flags().StringVar(&outputFormat, "format", "", "Output format: table, json, csv (overrides config)")
 }
 
 // Execute runs the root command.
@@ -69,6 +77,9 @@ func run(cmd *cobra.Command, args []string) error {
 	}
 	if routerKeyFile != "" {
 		cfg.Router.KeyFile = routerKeyFile
+	}
+	if outputFormat != "" {
+		cfg.Output.Format = outputFormat
 	}
 
 	if cfg.Router.Host == "" {
@@ -104,7 +115,7 @@ func run(cmd *cobra.Command, args []string) error {
 	defer signal.Stop(sigCh)
 	go func() {
 		<-sigCh
-		fmt.Println("\nReceived interrupt, stopping read-only session...")
+		fmt.Println("\nReceived interrupt, stopping...")
 		cancel()
 	}()
 
@@ -125,11 +136,60 @@ func run(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("parse UCI: %w", err)
 	}
 
-	fmt.Printf("Found %d proxy nodes\n", len(nodes))
-	for _, n := range nodes {
-		fmt.Printf("- %s | %s | %s | %s:%d\n", n.Name, n.Type, n.Protocol, n.Address, n.Port)
+	if !testMode {
+		// Inventory mode: print node list only
+		fmt.Printf("Found %d proxy nodes\n", len(nodes))
+		for _, n := range nodes {
+			fmt.Printf("- %s | %s | %s | %s:%d\n", n.Name, n.Type, n.Protocol, n.Address, n.Port)
+		}
+		fmt.Println("\nRead-only mode complete. No remote files were written and no router processes were started.")
+		return nil
 	}
 
-	fmt.Println("\nRead-only mode complete. No remote files were written and no router processes were started.")
+	// Testing mode
+	start := time.Now()
+
+	orch := shadow.New(sshClient, cfg.Router.Host, shadow.Options{
+		BasePort: cfg.Shadow.BasePort,
+	})
+	defer func() {
+		fmt.Println("\nCleaning up shadow proxies...")
+		if err := orch.Teardown(ctx); err != nil {
+			fmt.Fprintf(os.Stderr, "cleanup warning: %v\n", err)
+		}
+	}()
+
+	fmt.Printf("Found %d proxy nodes\n", len(nodes))
+	fmt.Println("Setting up shadow sing-box proxies on router...")
+
+	nodes, err = orch.Setup(ctx, nodes)
+	if err != nil {
+		return fmt.Errorf("setup shadow proxies: %w", err)
+	}
+
+	testCfg, err := config.ParseTestConfig(cfg)
+	if err != nil {
+		return fmt.Errorf("parse test config: %w", err)
+	}
+
+	fmt.Printf("Running tests (concurrency=%d, timeout=%s)...\n", testCfg.Concurrency, testCfg.Timeout)
+
+	runner := engine.NewRunner(cfg.Router.Host, testCfg)
+	results := runner.RunTests(ctx, nodes)
+
+	// Render results
+	renderer, err := report.NewRenderer(cfg.Output.Format)
+	if err != nil {
+		return fmt.Errorf("create renderer: %w", err)
+	}
+
+	renderer.RenderHeader(cfg.Router.Host, len(nodes), "sing-box", time.Since(start).Round(time.Millisecond).String())
+	if err := renderer.RenderResults(results); err != nil {
+		return fmt.Errorf("render results: %w", err)
+	}
+	if err := renderer.RenderSummary(results); err != nil {
+		return fmt.Errorf("render summary: %w", err)
+	}
+
 	return nil
 }

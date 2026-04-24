@@ -1,6 +1,10 @@
 package report
 
-import "github.com/txdywy/inice/internal/model"
+import (
+	"fmt"
+
+	"github.com/txdywy/inice/internal/model"
+)
 
 // Renderer defines how test results are displayed.
 type Renderer interface {
@@ -70,4 +74,18 @@ func Truncate(s string, max int) string {
 		return s
 	}
 	return s[:max-3] + "..."
+}
+
+// NewRenderer creates a renderer based on the format string.
+func NewRenderer(format string) (Renderer, error) {
+	switch format {
+	case "table", "":
+		return NewStaticRenderer(), nil
+	case "json":
+		return NewJSONRenderer(), nil
+	case "csv":
+		return NewCSVRenderer(), nil
+	default:
+		return nil, fmt.Errorf("unsupported format: %s (valid: table, json, csv)", format)
+	}
 }
