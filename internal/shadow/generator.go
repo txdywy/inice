@@ -7,22 +7,19 @@ import (
 	"github.com/txdywy/inice/internal/model"
 )
 
-// Generate creates a sing-box JSON configuration from proxy nodes.
-// It assigns SOCKS5 ports starting from basePort and returns the config bytes
-// along with a map of node index -> assigned SOCKS5 port.
-func Generate(nodes []model.ProxyNode, basePort int) ([]byte, map[int]int, error) {
+// GenerateSingboxConfig creates a sing-box JSON configuration from proxy nodes.
+// It uses the provided portMap (node index -> port) to configure inbounds.
+func GenerateSingboxConfig(nodes []model.ProxyNode, portMap map[int]int) ([]byte, error) {
 	if len(nodes) == 0 {
-		return nil, nil, fmt.Errorf("no nodes to generate config for")
+		return nil, fmt.Errorf("no nodes to generate config for")
 	}
 
-	portMap := make(map[int]int, len(nodes))
 	inbounds := make([]map[string]interface{}, 0, len(nodes))
 	outbounds := make([]map[string]interface{}, 0, len(nodes))
 	rules := make([]map[string]interface{}, 0, len(nodes))
 
 	for i, node := range nodes {
-		port := basePort + i
-		portMap[i] = port
+		port := portMap[i]
 
 		inTag := fmt.Sprintf("socks-in-%d", i)
 		outTag := fmt.Sprintf("out-%d", i)
@@ -36,7 +33,7 @@ func Generate(nodes []model.ProxyNode, basePort int) ([]byte, map[int]int, error
 
 		outbound, err := buildOutbound(node, outTag)
 		if err != nil {
-			return nil, nil, fmt.Errorf("node %q (%s): %w", node.Name, node.Protocol, err)
+			return nil, fmt.Errorf("node %q (%s): %w", node.Name, node.Protocol, err)
 		}
 		outbounds = append(outbounds, outbound)
 
@@ -61,9 +58,9 @@ func Generate(nodes []model.ProxyNode, basePort int) ([]byte, map[int]int, error
 
 	data, err := json.MarshalIndent(config, "", "  ")
 	if err != nil {
-		return nil, nil, fmt.Errorf("marshal config: %w", err)
+		return nil, fmt.Errorf("marshal config: %w", err)
 	}
-	return data, portMap, nil
+	return data, nil
 }
 
 func buildOutbound(node model.ProxyNode, tag string) (map[string]interface{}, error) {

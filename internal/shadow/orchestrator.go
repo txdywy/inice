@@ -9,16 +9,19 @@ import (
 	sshutil "github.com/txdywy/inice/internal/ssh"
 )
 
-// Orchestrator manages the lifecycle of a shadow sing-box process on the router.
+type managedProcess struct {
+	pid     int
+	logPath string
+	name    string
+}
+
+// Orchestrator manages the lifecycle of shadow proxies on the router.
 type Orchestrator struct {
-	sshClient  *sshutil.Client
-	routerIP   string
-	basePort   int
-	singBoxPath string
-	tempDir    string
-	configPath string
-	pid        int
-	started    bool
+	sshClient *sshutil.Client
+	routerIP  string
+	basePort  int
+	tempDir   string
+	processes []managedProcess
 }
 
 // Options configures the orchestrator.
@@ -35,38 +38,15 @@ func New(sshClient *sshutil.Client, routerIP string, opts Options) *Orchestrator
 		tempDir = fmt.Sprintf("/tmp/inice-%d", time.Now().Unix())
 	}
 	return &Orchestrator{
-		sshClient:   sshClient,
-		routerIP:    routerIP,
-		basePort:    opts.BasePort,
-		singBoxPath: opts.SingBoxPath,
-		tempDir:     tempDir,
-		configPath:  tempDir + "/config.json",
+		sshClient: sshClient,
+		routerIP:  routerIP,
+		basePort:  opts.BasePort,
+		tempDir:   tempDir,
 	}
 }
 
-// Setup generates the sing-box config, uploads it, and starts the process.
-// Returns nodes with SOCKS5Port populated.
+// Setup generates configs, uploads them, and starts the processes.
 func (o *Orchestrator) Setup(ctx context.Context, nodes []model.ProxyNode) ([]model.ProxyNode, error) {
-	// Detect sing-box binary if not provided
-	if o.singBoxPath == "" {
-		path, err := o.sshClient.Which(ctx, "sing-box")
-		if err != nil {
-			return nil, fmt.Errorf("sing-box not found on router; please install it: %w", err)
-		}
-		o.singBoxPath = path
-	}
-
-	// Check sing-box version for diagnostics
-	if version, _, _, err := o.sshClient.Execute(ctx, o.singBoxPath+" version"); err == nil {
-		fmt.Printf("  sing-box version: %s", version)
-	}
-
-	// Generate config
-	configData, portMap, err := Generate(nodes, o.basePort)
-	if err != nil {
-		return nil, fmt.Errorf("generate shadow config: %w", err)
-	}
-
 	// Create remote temp directory
 	_, _, exitCode, err := o.sshClient.Execute(ctx, "mkdir -p "+o.tempDir)
 	if err != nil {
@@ -76,74 +56,126 @@ func (o *Orchestrator) Setup(ctx context.Context, nodes []model.ProxyNode) ([]mo
 		return nil, fmt.Errorf("create temp dir failed with exit code %d", exitCode)
 	}
 
-	// Upload config
-	if err := o.sshClient.UploadFile(ctx, o.configPath, configData); err != nil {
-		_ = o.Teardown(ctx)
-		return nil, fmt.Errorf("upload config: %w", err)
+	result := make([]model.ProxyNode, len(nodes))
+	
+	type coreGroup struct {
+		nodes   []model.ProxyNode
+		portMap map[int]int
 	}
+	singboxGroup := coreGroup{portMap: make(map[int]int)}
+	xrayGroup := coreGroup{portMap: make(map[int]int)}
 
-	// Validate config before starting (sing-box check)
-	checkCmd := fmt.Sprintf("%s check -c %s -D %s", o.singBoxPath, o.configPath, o.tempDir)
-	checkStdout, checkStderr, checkExit, checkErr := o.sshClient.Execute(ctx, checkCmd)
-	if checkErr != nil || checkExit != 0 {
-		_ = o.Teardown(ctx)
-		errMsg := checkStderr
-		if errMsg == "" {
-			errMsg = checkStdout
+	// 1. Assign ports and group nodes
+	for i, node := range nodes {
+		port := o.basePort + i
+		node.SOCKS5Port = port
+		result[i] = node
+
+		switch node.Type {
+		case model.NodeTypeXray:
+			xrayGroup.nodes = append(xrayGroup.nodes, node)
+			xrayGroup.portMap[len(xrayGroup.nodes)-1] = port
+		case model.NodeTypeHysteria2:
+			// Hysteria2 is handled individually
+			cfgData := GenerateHysteria2Config(node, port)
+			cfgPath := fmt.Sprintf("%s/hysteria_%d.yaml", o.tempDir, i)
+			logPath := fmt.Sprintf("%s/hysteria_%d.log", o.tempDir, i)
+			
+			if err := o.sshClient.UploadFile(ctx, cfgPath, cfgData); err != nil {
+				o.Teardown(ctx)
+				return nil, fmt.Errorf("upload hysteria config: %w", err)
+			}
+			cmd := fmt.Sprintf("/usr/bin/hysteria -c %s server", cfgPath) // client mode is just implicit or requires client subcommand
+			// Wait, hysteria v2 client mode is `hysteria -c config.yaml`
+			cmd = fmt.Sprintf("/usr/bin/hysteria -c %s", cfgPath)
+			pid, err := o.sshClient.StartBackground(ctx, cmd, logPath)
+			if err != nil {
+				o.Teardown(ctx)
+				return nil, fmt.Errorf("start hysteria: %w", err)
+			}
+			o.processes = append(o.processes, managedProcess{pid: pid, logPath: logPath, name: "hysteria"})
+
+		default:
+			singboxGroup.nodes = append(singboxGroup.nodes, node)
+			singboxGroup.portMap[len(singboxGroup.nodes)-1] = port
 		}
-		return nil, fmt.Errorf("sing-box config check failed: %s", errMsg)
 	}
 
-	// Start sing-box in background, logging to file for diagnostics
-	logPath := o.tempDir + "/sing-box.log"
-	cmd := fmt.Sprintf("%s run -c %s -D %s", o.singBoxPath, o.configPath, o.tempDir)
-	pid, err := o.sshClient.StartBackground(ctx, cmd, logPath)
-	if err != nil {
-		_ = o.Teardown(ctx)
-		return nil, fmt.Errorf("start sing-box: %w", err)
+	// 2. Setup sing-box
+	if len(singboxGroup.nodes) > 0 {
+		cfgData, err := GenerateSingboxConfig(singboxGroup.nodes, singboxGroup.portMap)
+		if err != nil {
+			o.Teardown(ctx)
+			return nil, fmt.Errorf("generate singbox config: %w", err)
+		}
+		cfgPath := o.tempDir + "/singbox.json"
+		logPath := o.tempDir + "/singbox.log"
+		if err := o.sshClient.UploadFile(ctx, cfgPath, cfgData); err != nil {
+			o.Teardown(ctx)
+			return nil, fmt.Errorf("upload singbox config: %w", err)
+		}
+		cmd := fmt.Sprintf("/usr/bin/sing-box run -c %s -D %s", cfgPath, o.tempDir)
+		pid, err := o.sshClient.StartBackground(ctx, cmd, logPath)
+		if err != nil {
+			o.Teardown(ctx)
+			return nil, fmt.Errorf("start singbox: %w", err)
+		}
+		o.processes = append(o.processes, managedProcess{pid: pid, logPath: logPath, name: "sing-box"})
 	}
-	o.pid = pid
-	o.started = true
 
-	// Wait for sing-box to initialize (1s for slower routers)
+	// 3. Setup xray
+	if len(xrayGroup.nodes) > 0 {
+		cfgData, err := GenerateXrayConfig(xrayGroup.nodes, xrayGroup.portMap)
+		if err != nil {
+			o.Teardown(ctx)
+			return nil, fmt.Errorf("generate xray config: %w", err)
+		}
+		cfgPath := o.tempDir + "/xray.json"
+		logPath := o.tempDir + "/xray.log"
+		if err := o.sshClient.UploadFile(ctx, cfgPath, cfgData); err != nil {
+			o.Teardown(ctx)
+			return nil, fmt.Errorf("upload xray config: %w", err)
+		}
+		cmd := fmt.Sprintf("/usr/bin/xray run -c %s", cfgPath)
+		pid, err := o.sshClient.StartBackground(ctx, cmd, logPath)
+		if err != nil {
+			o.Teardown(ctx)
+			return nil, fmt.Errorf("start xray: %w", err)
+		}
+		o.processes = append(o.processes, managedProcess{pid: pid, logPath: logPath, name: "xray"})
+	}
+
+	// 4. Wait for processes to initialize
 	time.Sleep(1 * time.Second)
 
-	// Verify process is alive
-	if alive, _ := o.isAlive(ctx); !alive {
-		// Read log file to diagnose why it died
-		logContent, _ := o.sshClient.ReadFile(ctx, logPath, 4096)
-		_ = o.Teardown(ctx)
-		if logContent != "" {
-			return nil, fmt.Errorf("sing-box process (pid=%d) died immediately after start. Log output:\n%s", pid, logContent)
+	// 5. Verify processes are alive
+	for _, p := range o.processes {
+		if alive, _ := o.isAlive(ctx, p.pid); !alive {
+			logContent, _ := o.sshClient.ReadFile(ctx, p.logPath, 4096)
+			o.Teardown(ctx)
+			if logContent != "" {
+				return nil, fmt.Errorf("%s process (pid=%d) died immediately after start. Log output:\n%s", p.name, p.pid, logContent)
+			}
+			return nil, fmt.Errorf("%s process (pid=%d) died immediately after start", p.name, p.pid)
 		}
-		return nil, fmt.Errorf("sing-box process (pid=%d) died immediately after start (no log output captured)", pid)
-	}
-
-	// Populate SOCKS5 ports on nodes
-	result := make([]model.ProxyNode, len(nodes))
-	for i, node := range nodes {
-		node.SOCKS5Port = portMap[i]
-		result[i] = node
 	}
 
 	return result, nil
 }
 
-// Teardown stops the sing-box process and removes temp files.
-// It is safe to call multiple times (idempotent).
+// Teardown stops the managed processes and removes temp files.
 func (o *Orchestrator) Teardown(ctx context.Context) error {
-	if !o.started {
-		return nil
-	}
-
 	var errs []error
 
-	// Kill process
-	if o.pid > 0 {
-		if err := o.sshClient.KillProcess(ctx, o.pid); err != nil {
-			errs = append(errs, fmt.Errorf("kill process: %w", err))
+	// Kill processes
+	for _, p := range o.processes {
+		if p.pid > 0 {
+			if err := o.sshClient.KillProcess(ctx, p.pid); err != nil {
+				errs = append(errs, fmt.Errorf("kill %s process: %w", p.name, err))
+			}
 		}
 	}
+	o.processes = nil
 
 	// Remove temp directory
 	if o.tempDir != "" {
@@ -152,26 +184,27 @@ func (o *Orchestrator) Teardown(ctx context.Context) error {
 		}
 	}
 
-	o.started = false
-	o.pid = 0
-
 	if len(errs) > 0 {
 		return errs[0]
 	}
 	return nil
 }
 
-// IsAlive checks if the sing-box process is still running.
+// IsAlive checks if all managed processes are still running.
 func (o *Orchestrator) IsAlive(ctx context.Context) bool {
-	alive, _ := o.isAlive(ctx)
-	return alive
+	for _, p := range o.processes {
+		if alive, _ := o.isAlive(ctx, p.pid); !alive {
+			return false
+		}
+	}
+	return true
 }
 
-func (o *Orchestrator) isAlive(ctx context.Context) (bool, error) {
-	if o.pid <= 0 {
+func (o *Orchestrator) isAlive(ctx context.Context, pid int) (bool, error) {
+	if pid <= 0 {
 		return false, nil
 	}
-	_, _, exitCode, err := o.sshClient.Execute(ctx, fmt.Sprintf("kill -0 %d", o.pid))
+	_, _, exitCode, err := o.sshClient.Execute(ctx, fmt.Sprintf("kill -0 %d", pid))
 	if err != nil {
 		return false, err
 	}
