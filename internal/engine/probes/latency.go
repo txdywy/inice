@@ -5,43 +5,61 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
-	"sync"
 	"time"
 
 	"github.com/txdywy/inice/internal/model"
 )
 
-const (
-	latencyURL = "http://cp.cloudflare.com/generate_204"
-)
+var latencyURLs = []string{
+	"http://www.gstatic.com/generate_204",
+	"http://cp.cloudflare.com/generate_204",
+	"http://connect.rom.miui.com/generate_204",
+	"http://connectivitycheck.gstatic.com/generate_204",
+	"http://connectivitycheck.platform.hicloud.com/generate_204",
+	"http://wifi.vivo.com.cn/generate_204",
+	"http://edge-http.microsoft.com/captiveportal/generate_204",
+}
 
 // Latency runs HTTP HEAD latency probes through the SOCKS5 HTTP client.
 func Latency(ctx context.Context, client *http.Client, warmup, measure int) (model.LatencyResult, error) {
 	result := model.LatencyResult{}
 
-	// Warmup probes
-	for i := 0; i < warmup; i++ {
-		doHead(ctx, client, latencyURL)
+	// Warmup probes - also determines the best URL to use
+	bestURL := latencyURLs[0]
+	var bestDuration time.Duration = 999 * time.Second
+
+	for _, url := range latencyURLs {
+		d, err := doHead(ctx, client, url)
+		if err == nil && d < bestDuration {
+			bestDuration = d
+			bestURL = url
+		}
+	}
+
+	if bestDuration == 999*time.Second {
+		return result, fmt.Errorf("all warmup probes failed")
+	}
+
+	// Additional warmups with best URL
+	for i := 1; i < warmup; i++ {
+		doHead(ctx, client, bestURL)
 	}
 
 	// Measurement probes
 	var latencies []time.Duration
-	var mu sync.Mutex
 	var failures int
 
 	for i := 0; i < measure; i++ {
-		d, err := doHead(ctx, client, latencyURL)
+		d, err := doHead(ctx, client, bestURL)
 		if err != nil {
 			failures++
 			continue
 		}
-		mu.Lock()
 		latencies = append(latencies, d)
-		mu.Unlock()
 	}
 
 	if len(latencies) == 0 {
-		return result, fmt.Errorf("all %d measurements failed (%d warmup skipped)", measure, warmup)
+		return result, fmt.Errorf("all %d measurements failed", measure)
 	}
 
 	// Compute statistics
@@ -50,7 +68,7 @@ func Latency(ctx context.Context, client *http.Client, warmup, measure int) (mod
 	n := len(latencies)
 	result.Min = latencies[0]
 	result.Max = latencies[n-1]
-	result.Loss = float64(failures) / float64(measure+failures)
+	result.Loss = float64(failures) / float64(measure)
 
 	var sum time.Duration
 	for _, d := range latencies {

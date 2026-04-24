@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -65,9 +66,13 @@ func ParseUCIOutput(output string) ([]model.ProxyNode, error) {
 	var nodes []model.ProxyNode
 	for _, section := range sectionOrder {
 		raw := rawMap[section]
+		if _, hasType := raw.props["type"]; !hasType {
+			// Skip sections that don't have a 'type' property (not a proxy node)
+			continue
+		}
 		node, err := normalizeNode(raw.props)
 		if err != nil {
-			// Log warning but continue with other nodes
+			fmt.Fprintf(os.Stderr, "skipping node %s: %v\n", section, err)
 			continue
 		}
 		nodes = append(nodes, node)
@@ -105,10 +110,10 @@ func normalizeNode(props map[string]string) (model.ProxyNode, error) {
 	case "sing-box":
 		n.Type = model.NodeTypeSingBox
 		return normalizeSingBoxNode(n, props)
-	case "Shadowsocks":
+	case "Shadowsocks", "SS-Rust", "ss":
 		n.Type = model.NodeTypeShadowsocks
 		return normalizeShadowsocksNode(n, props)
-	case "hysteria2":
+	case "Hysteria2", "hysteria2":
 		n.Type = model.NodeTypeHysteria2
 		return normalizeHysteria2Node(n, props)
 	case "TUIC":
@@ -127,26 +132,49 @@ func normalizeXrayNode(n model.ProxyNode, props map[string]string) (model.ProxyN
 	n.Name = props["remarks"]
 	n.Protocol = model.Protocol(props["protocol"])
 
-	// Xray-type nodes use xray_ prefix
-	n.Address = props["xray_address"]
-	port, _ := strconv.Atoi(props["xray_port"])
+	// Helper to get prefixed or unprefixed property
+	getProp := func(key string) string {
+		if v, ok := props["xray_"+key]; ok && v != "" {
+			return v
+		}
+		if v, ok := props[key]; ok && v != "" {
+			return v
+		}
+		return ""
+	}
+
+	n.Address = getProp("address")
+	port, _ := strconv.Atoi(getProp("port"))
 	n.Port = port
-	n.UUID = props["xray_uuid"]
-	n.Password = props["xray_password"]
-	n.Security = props["xray_security"]
-	n.Flow = props["xray_flow"]
-	n.TLS = props["xray_tls"] == "1"
-	n.Reality = props["xray_reality"] == "1" || props["xray_reality"] == "true"
-	n.Transport = props["xray_transport"]
-	n.WSHost = props["xray_ws_host"]
-	n.WSPath = props["xray_ws_path"]
-	n.SNI = props["xray_tls_serverName"]
-	n.Fingerprint = props["xray_fingerprint"]
-	n.GRPCServiceName = props["xray_grpc_serviceName"]
-	n.SSMethod = props["xray_ss_method"]
+	n.UUID = getProp("uuid")
+	n.Password = getProp("password")
+	n.Security = getProp("security")
+	n.Flow = getProp("flow")
+	
+	tlsVal := getProp("tls")
+	n.TLS = tlsVal == "1" || tlsVal == "true"
+	
+	realityVal := getProp("reality")
+	n.Reality = realityVal == "1" || realityVal == "true"
+	n.RealityPublicKey = getProp("reality_publicKey")
+	n.RealityShortID = getProp("reality_shortId")
+	
+	n.Transport = getProp("transport")
+	n.WSHost = getProp("ws_host")
+	n.WSPath = getProp("ws_path")
+	n.SNI = getProp("tls_serverName")
+	if n.SNI == "" {
+		n.SNI = getProp("sni") // another common field name
+	}
+	n.Fingerprint = getProp("fingerprint")
+	n.GRPCServiceName = getProp("grpc_serviceName")
+	n.SSMethod = getProp("ss_method")
+	if n.SSMethod == "" {
+		n.SSMethod = getProp("method")
+	}
 
 	// ALPN
-	if alpn := props["xray_alpn"]; alpn != "" {
+	if alpn := getProp("alpn"); alpn != "" {
 		n.ALPN = strings.Split(alpn, ",")
 	}
 
@@ -170,7 +198,12 @@ func normalizeSingBoxNode(n model.ProxyNode, props map[string]string) (model.Pro
 	n.Password = props["password"]
 	n.Username = props["username"]
 	n.TLS = props["tls"] == "1" || props["tls"] == "true"
+	if n.Protocol == model.ProtoAnyTLS || n.Protocol == model.ProtoTUIC || n.Protocol == model.ProtoHysteria2 {
+		n.TLS = true
+	}
 	n.Reality = props["reality"] == "1" || props["reality"] == "true"
+	n.RealityPublicKey = props["reality_publicKey"]
+	n.RealityShortID = props["reality_shortId"]
 	n.Transport = props["transport"]
 	n.WSHost = props["ws_host"]
 	n.WSPath = props["ws_path"]
@@ -189,6 +222,13 @@ func normalizeSingBoxNode(n model.ProxyNode, props map[string]string) (model.Pro
 	n.TUICCongestionControl = props["tuic_congestion_control"]
 	n.TUICUDPMode = props["tuic_udp_relay_mode"]
 
+	// AnyTLS fields
+	n.AnyTLSIdleCheckInterval = props["anytls_idle_session_check_interval"]
+	n.AnyTLSIdleTimeout = props["anytls_idle_session_timeout"]
+	if v, err := strconv.Atoi(props["anytls_min_idle_session"]); err == nil {
+		n.AnyTLSMinIdleSession = v
+	}
+
 	if n.Name == "" {
 		n.Name = fmt.Sprintf("%s-%s-%s", n.Type, n.Protocol, n.Address)
 	}
@@ -202,8 +242,18 @@ func normalizeSingBoxNode(n model.ProxyNode, props map[string]string) (model.Pro
 func normalizeShadowsocksNode(n model.ProxyNode, props map[string]string) (model.ProxyNode, error) {
 	n.Name = props["remarks"]
 	n.Protocol = model.Protocol(props["protocol"])
-	n.Address = props["server"]
-	port, _ := strconv.Atoi(props["server_port"])
+	if n.Protocol == "" {
+		n.Protocol = model.ProtoShadowsocks
+	}
+	n.Address = props["address"]
+	if n.Address == "" {
+		n.Address = props["server"]
+	}
+	portStr := props["port"]
+	if portStr == "" {
+		portStr = props["server_port"]
+	}
+	port, _ := strconv.Atoi(portStr)
 	n.Port = port
 	n.Password = props["password"]
 	n.SSMethod = props["method"]
@@ -222,18 +272,55 @@ func normalizeShadowsocksNode(n model.ProxyNode, props map[string]string) (model
 func normalizeHysteria2Node(n model.ProxyNode, props map[string]string) (model.ProxyNode, error) {
 	n.Name = props["remarks"]
 	n.Protocol = model.ProtoHysteria2
-	n.Address = props["server"]
-	port, _ := strconv.Atoi(props["server_port"])
+	n.Address = props["address"]
+	if n.Address == "" {
+		n.Address = props["server"]
+	}
+	portStr := props["port"]
+	if portStr == "" {
+		portStr = props["server_port"]
+	}
+	port, _ := strconv.Atoi(portStr)
 	n.Port = port
-	n.Password = props["password"]
-	n.Hysteria2UpMbps, _ = strconv.Atoi(props["up_mbps"])
-	n.Hysteria2DownMbps, _ = strconv.Atoi(props["down_mbps"])
-	n.Hysteria2ObfsType = props["obfs_type"]
-	n.Hysteria2ObfsPass = props["obfs_password"]
-	n.Hysteria2AuthPass = props["auth_password"]
+
+	n.Password = props["hysteria2_auth_password"]
+	if n.Password == "" {
+		n.Password = props["auth_password"]
+	}
+	if n.Password == "" {
+		n.Password = props["password"]
+	}
+
+	upStr := props["hysteria2_up_mbps"]
+	if upStr == "" {
+		upStr = props["up_mbps"]
+	}
+	n.Hysteria2UpMbps, _ = strconv.Atoi(upStr)
+
+	downStr := props["hysteria2_down_mbps"]
+	if downStr == "" {
+		downStr = props["down_mbps"]
+	}
+	n.Hysteria2DownMbps, _ = strconv.Atoi(downStr)
+
+	n.Hysteria2ObfsType = props["hysteria2_obfs_type"]
+	if n.Hysteria2ObfsType == "" {
+		n.Hysteria2ObfsType = props["obfs_type"]
+	}
+
+	n.Hysteria2ObfsPass = props["hysteria2_obfs_password"]
+	if n.Hysteria2ObfsPass == "" {
+		n.Hysteria2ObfsPass = props["obfs_password"]
+	}
+
+	n.Hysteria2AuthPass = n.Password // fallback
+	n.TLS = true
 
 	if n.Name == "" {
 		n.Name = fmt.Sprintf("Hysteria2-%s", n.Address)
+	}
+	if n.Address == "" {
+		return n, fmt.Errorf("Hysteria2 node %s missing address", n.Name)
 	}
 	return n, nil
 }
@@ -242,16 +329,27 @@ func normalizeHysteria2Node(n model.ProxyNode, props map[string]string) (model.P
 func normalizeTUICNode(n model.ProxyNode, props map[string]string) (model.ProxyNode, error) {
 	n.Name = props["remarks"]
 	n.Protocol = model.ProtoTUIC
-	n.Address = props["server"]
-	port, _ := strconv.Atoi(props["server_port"])
+	n.Address = props["address"]
+	if n.Address == "" {
+		n.Address = props["server"]
+	}
+	portStr := props["port"]
+	if portStr == "" {
+		portStr = props["server_port"]
+	}
+	port, _ := strconv.Atoi(portStr)
 	n.Port = port
 	n.UUID = props["uuid"]
 	n.Password = props["password"]
 	n.TUICCongestionControl = props["congestion_control"]
 	n.TUICUDPMode = props["udp_relay_mode"]
+	n.TLS = true
 
 	if n.Name == "" {
 		n.Name = fmt.Sprintf("TUIC-%s", n.Address)
+	}
+	if n.Address == "" {
+		return n, fmt.Errorf("TUIC node %s missing address", n.Name)
 	}
 	return n, nil
 }

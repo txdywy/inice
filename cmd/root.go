@@ -12,6 +12,7 @@ import (
 
 	"github.com/txdywy/inice/internal/config"
 	"github.com/txdywy/inice/internal/engine"
+	"github.com/txdywy/inice/internal/model"
 	"github.com/txdywy/inice/internal/report"
 	"github.com/txdywy/inice/internal/shadow"
 	sshutil "github.com/txdywy/inice/internal/ssh"
@@ -147,14 +148,16 @@ func run(cmd *cobra.Command, args []string) error {
 	}
 
 	// Testing mode
-	start := time.Now()
-
 	orch := shadow.New(sshClient, cfg.Router.Host, shadow.Options{
 		BasePort: cfg.Shadow.BasePort,
 	})
 	defer func() {
 		fmt.Println("\nCleaning up shadow proxies...")
-		if err := orch.Teardown(ctx); err != nil {
+		// Use a separate context for teardown so cleanup succeeds even
+		// if the main ctx was cancelled (e.g. Ctrl+C).
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cleanupCancel()
+		if err := orch.Teardown(cleanupCtx); err != nil {
 			fmt.Fprintf(os.Stderr, "cleanup warning: %v\n", err)
 		}
 	}()
@@ -172,21 +175,22 @@ func run(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("parse test config: %w", err)
 	}
 
-	fmt.Printf("Running tests (concurrency=%d, timeout=%s)...\n", testCfg.Concurrency, testCfg.Timeout)
-
-	runner := engine.NewRunner(cfg.Router.Host, testCfg)
-	results := runner.RunTests(ctx, nodes)
-
-	// Render results
+	// Setup renderer for streaming results
 	renderer, err := report.NewRenderer(cfg.Output.Format)
 	if err != nil {
 		return fmt.Errorf("create renderer: %w", err)
 	}
 
-	renderer.RenderHeader(cfg.Router.Host, len(nodes), "sing-box", time.Since(start).Round(time.Millisecond).String())
-	if err := renderer.RenderResults(results); err != nil {
-		return fmt.Errorf("render results: %w", err)
-	}
+	fmt.Printf("Running tests (concurrency=%d, timeout=%s)...\n", testCfg.Concurrency, testCfg.Timeout)
+	
+	renderer.RenderHeader(cfg.Router.Host, len(nodes), "sing-box", "")
+	renderer.RenderTableHeader()
+
+	runner := engine.NewRunner(cfg.Router.Host, testCfg)
+	results := runner.RunTests(ctx, nodes, func(idx int, total int, res model.TestResult) {
+		renderer.RenderRow(res)
+	})
+
 	if err := renderer.RenderSummary(results); err != nil {
 		return fmt.Errorf("render summary: %w", err)
 	}

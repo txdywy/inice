@@ -3,7 +3,6 @@ package report
 import (
 	"encoding/json"
 	"fmt"
-	"time"
 
 	"github.com/txdywy/inice/internal/model"
 )
@@ -22,21 +21,28 @@ func (r *JSONRenderer) RenderHeader(routerHost string, nodeCount int, coreType s
 	// JSON output doesn't use header - everything goes in one object
 }
 
-func (r *JSONRenderer) RenderProgress(current, total int, nodeName, status string) {
-	// JSON output doesn't show progress
+func (r *JSONRenderer) RenderTableHeader() {
+	// JSONL doesn't need a table header, but we can print nothing
 }
 
-func (r *JSONRenderer) RenderResults(results []model.TestResult) error {
-	output := map[string]interface{}{
-		"timestamp": time.Now().UTC().Format(time.RFC3339),
-		"results":   results,
+func (r *JSONRenderer) RenderRow(res model.TestResult) {
+	// Map to jsonResult for clean JSON output
+	out := jsonResult{
+		Node:          res.Node,
+		Latency:       res.Latency,
+		ExitIP:        res.ExitIP,
+		DNSLeak:       res.DNSLeak,
+		Streaming:     res.Streaming,
+		UDPOK:         res.UDPOK,
+		UDPError:      res.UDPError,
+		Errors:        res.Errors,
+		TotalDuration: res.TotalDuration.String(),
 	}
-	data, err := json.MarshalIndent(output, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal results: %w", err)
+
+	data, err := json.Marshal(out)
+	if err == nil {
+		fmt.Println(string(data))
 	}
-	fmt.Println(string(data))
-	return nil
 }
 
 func (r *JSONRenderer) RenderSummary(results []model.TestResult) error {

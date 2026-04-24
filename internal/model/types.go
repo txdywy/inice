@@ -29,6 +29,7 @@ const (
 	ProtoNaive       Protocol = "naive"
 	ProtoWireGuard   Protocol = "wireguard"
 	ProtoSSH         Protocol = "ssh"
+	ProtoAnyTLS      Protocol = "anytls"
 )
 
 // ProxyNode is the normalized representation of a PassWall2 proxy node,
@@ -46,6 +47,8 @@ type ProxyNode struct {
 	Flow       string // vless flow control (xtls-rprx-vision)
 	TLS        bool
 	Reality    bool
+	RealityPublicKey string
+	RealityShortID   string
 	Transport  string // tcp/ws/grpc/httpupgrade/quic
 	WSHost     string
 	WSPath     string
@@ -65,6 +68,10 @@ type ProxyNode struct {
 	SSMethod string
 	// gRPC
 	GRPCServiceName string
+	// AnyTLS specific
+	AnyTLSIdleCheckInterval string
+	AnyTLSIdleTimeout       string
+	AnyTLSMinIdleSession    int
 	// Assigned during shadow config generation
 	SOCKS5Port int
 }
@@ -125,7 +132,9 @@ type DNSLeakResult struct {
 
 // StreamingResult holds streaming/geo-unlock test results.
 type StreamingResult struct {
-	Netflix  string // "YES", "NO", "MAYBE", "ERROR"
+	Google   string // "YES", "NO", "MAYBE", "ERROR"
+	GitHub   string
+	Netflix  string
 	ChatGPT  string
 	YouTube  string
 	Disney   string
@@ -157,7 +166,7 @@ type TestConfig struct {
 func DefaultTestConfig() TestConfig {
 	return TestConfig{
 		Concurrency:       10,
-		Timeout:           3 * time.Second,
+		Timeout:           5 * time.Second,
 		WarmupProbes:      3,
 		MeasurementProbes: 5,
 	}
@@ -196,7 +205,7 @@ func DefaultUserConfig() UserConfig {
 	cfg.Shadow.PreferredCore = "auto"
 	cfg.Shadow.BasePort = 20000
 	cfg.Testing.Concurrency = 10
-	cfg.Testing.Timeout = "3s"
+	cfg.Testing.Timeout = "10s"
 	cfg.Testing.WarmupProbes = 3
 	cfg.Testing.MeasurementProbes = 5
 	cfg.Output.Mode = "static"

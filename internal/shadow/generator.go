@@ -30,7 +30,7 @@ func Generate(nodes []model.ProxyNode, basePort int) ([]byte, map[int]int, error
 		inbounds = append(inbounds, map[string]interface{}{
 			"type":        "socks",
 			"tag":         inTag,
-			"listen":      "127.0.0.1",
+			"listen":      "0.0.0.0",
 			"listen_port": port,
 		})
 
@@ -186,6 +186,24 @@ func buildOutbound(node model.ProxyNode, tag string) (map[string]interface{}, er
 			out["password"] = node.Password
 		}
 
+	case model.ProtoAnyTLS:
+		out["type"] = "anytls"
+		out["server"] = node.Address
+		out["server_port"] = node.Port
+		if node.Password != "" {
+			out["password"] = node.Password
+		}
+		if node.AnyTLSIdleCheckInterval != "" {
+			out["idle_session_check_interval"] = node.AnyTLSIdleCheckInterval
+		}
+		if node.AnyTLSIdleTimeout != "" {
+			out["idle_session_timeout"] = node.AnyTLSIdleTimeout
+		}
+		if node.AnyTLSMinIdleSession > 0 {
+			out["min_idle_session"] = node.AnyTLSMinIdleSession
+		}
+		addTLS(node, out)
+
 	case model.ProtoWireGuard:
 		return nil, fmt.Errorf("wireguard not yet supported for shadow testing")
 
@@ -230,8 +248,12 @@ func addTLS(node model.ProxyNode, out map[string]interface{}) {
 		reality := map[string]interface{}{
 			"enabled": true,
 		}
-		// Reality requires public_key and short_id which are not in our model yet
-		// For now, enable with basic settings
+		if node.RealityPublicKey != "" {
+			reality["public_key"] = node.RealityPublicKey
+		}
+		if node.RealityShortID != "" {
+			reality["short_id"] = node.RealityShortID
+		}
 		tls["reality"] = reality
 	}
 
@@ -239,8 +261,12 @@ func addTLS(node model.ProxyNode, out map[string]interface{}) {
 }
 
 func addTransport(node model.ProxyNode, out map[string]interface{}) {
-	if node.Transport == "" {
+	if node.Transport == "" || node.Transport == "tcp" || node.Transport == "raw" {
 		return
+	}
+
+	if node.Transport == "xhttp" {
+		node.Transport = "httpupgrade"
 	}
 
 	transport := map[string]interface{}{

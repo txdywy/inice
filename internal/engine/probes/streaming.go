@@ -13,6 +13,8 @@ import (
 // accessibility through the proxy.
 func Streaming(ctx context.Context, client *http.Client) model.StreamingResult {
 	result := model.StreamingResult{
+		Google:   "ERROR",
+		GitHub:   "ERROR",
 		Netflix:  "ERROR",
 		ChatGPT:  "ERROR",
 		YouTube:  "ERROR",
@@ -25,6 +27,8 @@ func Streaming(ctx context.Context, client *http.Client) model.StreamingResult {
 		url  string
 		set  func(string)
 	}{
+		{"Google", "https://www.google.com/generate_204", func(v string) { result.Google = v }},
+		{"GitHub", "https://github.com/", func(v string) { result.GitHub = v }},
 		{"Netflix", "https://www.netflix.com/title/80018499", func(v string) { result.Netflix = v }},
 		{"ChatGPT", "https://chat.openai.com/", func(v string) { result.ChatGPT = v }},
 		{"YouTube", "https://www.youtube.com/", func(v string) { result.YouTube = v }},
@@ -41,7 +45,12 @@ func Streaming(ctx context.Context, client *http.Client) model.StreamingResult {
 }
 
 func checkStreaming(ctx context.Context, client *http.Client, url string) string {
-	timeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	timeout := client.Timeout
+	if timeout == 0 {
+		timeout = 10 * time.Second
+	}
+
+	timeCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(timeCtx, "HEAD", url, nil)
@@ -53,7 +62,7 @@ func checkStreaming(ctx context.Context, client *http.Client, url string) string
 	// Disable redirect following to detect geo-block redirects
 	clientNoRedirect := &http.Client{
 		Transport: client.Transport,
-		Timeout:   5 * time.Second,
+		Timeout:   timeout,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
@@ -66,9 +75,10 @@ func checkStreaming(ctx context.Context, client *http.Client, url string) string
 	defer resp.Body.Close()
 
 	switch resp.StatusCode {
-	case 200, 204, 301, 302:
+	case 200, 204, 301, 302, 307, 308, 405:
 		// 200/204: directly accessible
-		// 301/302: redirecting (some services redirect to region-specific pages)
+		// 301/302/307/308: redirecting (some services redirect to region-specific pages)
+		// 405: Method Not Allowed (some servers reject HEAD but are otherwise reachable)
 		location := resp.Header.Get("Location")
 		if location != "" {
 			_ = location

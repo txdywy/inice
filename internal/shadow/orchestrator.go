@@ -56,6 +56,11 @@ func (o *Orchestrator) Setup(ctx context.Context, nodes []model.ProxyNode) ([]mo
 		o.singBoxPath = path
 	}
 
+	// Check sing-box version for diagnostics
+	if version, _, _, err := o.sshClient.Execute(ctx, o.singBoxPath+" version"); err == nil {
+		fmt.Printf("  sing-box version: %s", version)
+	}
+
 	// Generate config
 	configData, portMap, err := Generate(nodes, o.basePort)
 	if err != nil {
@@ -77,9 +82,22 @@ func (o *Orchestrator) Setup(ctx context.Context, nodes []model.ProxyNode) ([]mo
 		return nil, fmt.Errorf("upload config: %w", err)
 	}
 
-	// Start sing-box in background
+	// Validate config before starting (sing-box check)
+	checkCmd := fmt.Sprintf("%s check -c %s -D %s", o.singBoxPath, o.configPath, o.tempDir)
+	checkStdout, checkStderr, checkExit, checkErr := o.sshClient.Execute(ctx, checkCmd)
+	if checkErr != nil || checkExit != 0 {
+		_ = o.Teardown(ctx)
+		errMsg := checkStderr
+		if errMsg == "" {
+			errMsg = checkStdout
+		}
+		return nil, fmt.Errorf("sing-box config check failed: %s", errMsg)
+	}
+
+	// Start sing-box in background, logging to file for diagnostics
+	logPath := o.tempDir + "/sing-box.log"
 	cmd := fmt.Sprintf("%s run -c %s -D %s", o.singBoxPath, o.configPath, o.tempDir)
-	pid, err := o.sshClient.StartBackground(ctx, cmd)
+	pid, err := o.sshClient.StartBackground(ctx, cmd, logPath)
 	if err != nil {
 		_ = o.Teardown(ctx)
 		return nil, fmt.Errorf("start sing-box: %w", err)
@@ -87,13 +105,18 @@ func (o *Orchestrator) Setup(ctx context.Context, nodes []model.ProxyNode) ([]mo
 	o.pid = pid
 	o.started = true
 
-	// Wait briefly for sing-box to initialize
-	time.Sleep(500 * time.Millisecond)
+	// Wait for sing-box to initialize (1s for slower routers)
+	time.Sleep(1 * time.Second)
 
 	// Verify process is alive
 	if alive, _ := o.isAlive(ctx); !alive {
+		// Read log file to diagnose why it died
+		logContent, _ := o.sshClient.ReadFile(ctx, logPath, 4096)
 		_ = o.Teardown(ctx)
-		return nil, fmt.Errorf("sing-box process (pid=%d) died immediately after start", pid)
+		if logContent != "" {
+			return nil, fmt.Errorf("sing-box process (pid=%d) died immediately after start. Log output:\n%s", pid, logContent)
+		}
+		return nil, fmt.Errorf("sing-box process (pid=%d) died immediately after start (no log output captured)", pid)
 	}
 
 	// Populate SOCKS5 ports on nodes

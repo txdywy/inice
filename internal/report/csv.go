@@ -23,11 +23,7 @@ func (r *CSVRenderer) RenderHeader(routerHost string, nodeCount int, coreType st
 	// No header in CSV
 }
 
-func (r *CSVRenderer) RenderProgress(current, total int, nodeName, status string) {
-	// No progress in CSV
-}
-
-func (r *CSVRenderer) RenderResults(results []model.TestResult) error {
+func (r *CSVRenderer) RenderTableHeader() {
 	header := []string{
 		"name", "type", "protocol", "address", "port",
 		"latency_ms", "latency_class", "loss_pct",
@@ -35,57 +31,54 @@ func (r *CSVRenderer) RenderResults(results []model.TestResult) error {
 		"netflix", "chatgpt", "youtube", "disney", "bilibili",
 		"udp_ok", "errors",
 	}
-	if err := r.w.Write(header); err != nil {
-		return fmt.Errorf("write CSV header: %w", err)
-	}
-
-	for _, res := range results {
-		latencyMs := ""
-		if res.Latency.Avg > 0 {
-			latencyMs = fmt.Sprintf("%.1f", float64(res.Latency.Avg)/float64(time.Millisecond))
-		}
-		lossPct := fmt.Sprintf("%.1f", res.Latency.Loss*100)
-		hosting := ""
-		if res.ExitIP.IP != "" {
-			if res.ExitIP.Hosting {
-				hosting = "yes"
-			} else {
-				hosting = "no"
-			}
-		}
-		udpOk := "no"
-		if res.UDPOK {
-			udpOk = "yes"
-		}
-
-		row := []string{
-			res.Node.Name,
-			string(res.Node.Type),
-			string(res.Node.Protocol),
-			res.Node.Address,
-			fmt.Sprintf("%d", res.Node.Port),
-			latencyMs,
-			string(res.Latency.Class),
-			lossPct,
-			res.ExitIP.IP,
-			res.ExitIP.Country,
-			res.ExitIP.ISP,
-			hosting,
-			res.Streaming.Netflix,
-			res.Streaming.ChatGPT,
-			res.Streaming.YouTube,
-			res.Streaming.Disney,
-			res.Streaming.Bilibili,
-			udpOk,
-			joinErrors(res.Errors),
-		}
-		if err := r.w.Write(row); err != nil {
-			return fmt.Errorf("write CSV row: %w", err)
-		}
-	}
-
+	r.w.Write(header)
 	r.w.Flush()
-	return r.w.Error()
+}
+
+func (r *CSVRenderer) RenderRow(res model.TestResult) {
+	latencyMs := ""
+	if res.Latency.Avg > 0 {
+		latencyMs = fmt.Sprintf("%.1f", float64(res.Latency.Avg)/float64(time.Millisecond))
+	}
+	lossPct := fmt.Sprintf("%.1f", res.Latency.Loss*100)
+	hosting := ""
+	if res.ExitIP.IP != "" {
+		if res.ExitIP.Hosting {
+			hosting = "yes"
+		} else {
+			hosting = "no"
+		}
+	}
+	udpOk := "no"
+	if res.UDPOK {
+		udpOk = "yes"
+	}
+
+	row := []string{
+		res.Node.Name,
+		string(res.Node.Type),
+		string(res.Node.Protocol),
+		res.Node.Address,
+		fmt.Sprintf("%d", res.Node.Port),
+		latencyMs,
+		string(res.Latency.Class),
+		lossPct,
+		res.ExitIP.IP,
+		res.ExitIP.Country,
+		res.ExitIP.ISP,
+		hosting,
+		res.Streaming.Google,
+		res.Streaming.GitHub,
+		res.Streaming.Netflix,
+		res.Streaming.ChatGPT,
+		res.Streaming.YouTube,
+		res.Streaming.Disney,
+		res.Streaming.Bilibili,
+		udpOk,
+		joinErrors(res.Errors),
+	}
+	r.w.Write(row)
+	r.w.Flush()
 }
 
 func (r *CSVRenderer) RenderSummary(results []model.TestResult) error {

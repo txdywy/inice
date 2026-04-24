@@ -151,43 +151,59 @@ func (c *Client) UploadFile(ctx context.Context, remotePath string, data []byte)
 		return fmt.Errorf("stdin pipe: %w", err)
 	}
 
-	session.Stdout = os.Stdout
-	session.Stderr = os.Stderr
+	var stderrBuf bytes.Buffer
+	session.Stderr = &stderrBuf
 
-	errCh := make(chan error, 1)
+	// Start the remote command (non-blocking, unlike Run which blocks)
+	if err := session.Start("cat > '" + remotePath + "'"); err != nil {
+		return fmt.Errorf("start remote cat: %w", err)
+	}
+
+	// Write all data to stdin, then close to signal EOF to the remote cat
+	if _, err := stdin.Write(data); err != nil {
+		// Try to clean up the remote process
+		_ = session.Signal(ssh.SIGKILL)
+		return fmt.Errorf("write data: %w", err)
+	}
+	if err := stdin.Close(); err != nil {
+		return fmt.Errorf("close stdin: %w", err)
+	}
+
+	// Wait for the remote command to finish with context support
+	waitCh := make(chan error, 1)
 	go func() {
-		errCh <- session.Run("cat > '" + remotePath + "'")
+		waitCh <- session.Wait()
 	}()
-
-	_, writeErr := stdin.Write(data)
-	stdin.Close()
 
 	select {
 	case <-ctx.Done():
-		session.Signal(ssh.SIGKILL)
+		_ = session.Signal(ssh.SIGKILL)
 		return ctx.Err()
-	case err := <-errCh:
-		if writeErr != nil {
-			return fmt.Errorf("write data: %w", writeErr)
-		}
+	case err := <-waitCh:
 		if err != nil {
-			return fmt.Errorf("upload file: %w", err)
+			return fmt.Errorf("upload file: %w (stderr: %s)", err, stderrBuf.String())
 		}
 		return nil
 	}
 }
 
 // StartBackground starts a command in the background and returns its PID.
-// Uses a shell wrapper to emit the shell's PID before exec.
-func (c *Client) StartBackground(ctx context.Context, cmd string) (int, error) {
-	// Use nohup and echo $$ to get the PID reliably
-	wrapped := fmt.Sprintf("nohup sh -c 'echo $$; exec %s' >/dev/null 2>&1 &", cmd)
-	stdout, _, exitCode, err := c.Execute(ctx, wrapped)
+// logFile can be empty to discard output, or a path to capture stdout/stderr.
+func (c *Client) StartBackground(ctx context.Context, cmd string, logFile string) (int, error) {
+	// Background the command with nohup (prevents SIGHUP on session close).
+	// $! is the PID of the last backgrounded process and echo runs in the
+	// foreground so its output reaches the SSH session's stdout.
+	outRedirect := "/dev/null"
+	if logFile != "" {
+		outRedirect = logFile
+	}
+	wrapped := fmt.Sprintf("nohup %s >%s 2>&1 & echo $!", cmd, outRedirect)
+	stdout, stderr, exitCode, err := c.Execute(ctx, wrapped)
 	if err != nil {
 		return 0, fmt.Errorf("start background: %w", err)
 	}
 	if exitCode != 0 {
-		return 0, fmt.Errorf("start background failed with exit code %d", exitCode)
+		return 0, fmt.Errorf("start background failed with exit code %d: %s", exitCode, stderr)
 	}
 
 	// Parse PID from first line of output
@@ -200,6 +216,19 @@ func (c *Client) StartBackground(ctx context.Context, cmd string) (int, error) {
 		return 0, fmt.Errorf("parse PID %q: %w", pidStr, err)
 	}
 	return pid, nil
+}
+
+// ReadFile reads the contents of a remote file (up to maxBytes).
+func (c *Client) ReadFile(ctx context.Context, path string, maxBytes int) (string, error) {
+	cmd := fmt.Sprintf("head -c %d '%s' 2>/dev/null", maxBytes, path)
+	stdout, _, exitCode, err := c.Execute(ctx, cmd)
+	if err != nil {
+		return "", fmt.Errorf("read file: %w", err)
+	}
+	if exitCode != 0 {
+		return "", fmt.Errorf("read file %s: exit code %d", path, exitCode)
+	}
+	return stdout, nil
 }
 
 // KillProcess sends SIGTERM then SIGKILL if the process still exists.

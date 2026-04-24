@@ -9,8 +9,8 @@ import (
 // Renderer defines how test results are displayed.
 type Renderer interface {
 	RenderHeader(routerHost string, nodeCount int, coreType string, duration string)
-	RenderProgress(current, total int, nodeName, status string)
-	RenderResults(results []model.TestResult) error
+	RenderTableHeader()
+	RenderRow(result model.TestResult)
 	RenderSummary(results []model.TestResult) error
 }
 

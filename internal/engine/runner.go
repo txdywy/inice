@@ -25,10 +25,12 @@ func NewRunner(routerIP string, cfg model.TestConfig) *Runner {
 }
 
 // RunTests tests all nodes concurrently and returns results in order.
-func (r *Runner) RunTests(ctx context.Context, nodes []model.ProxyNode) []model.TestResult {
+func (r *Runner) RunTests(ctx context.Context, nodes []model.ProxyNode, onComplete func(idx int, total int, res model.TestResult)) []model.TestResult {
 	results := make([]model.TestResult, len(nodes))
 	sem := make(chan struct{}, r.cfg.Concurrency)
 	var wg sync.WaitGroup
+	var completed int
+	var mu sync.Mutex
 
 	for i, node := range nodes {
 		wg.Add(1)
@@ -39,15 +41,31 @@ func (r *Runner) RunTests(ctx context.Context, nodes []model.ProxyNode) []model.
 			select {
 			case sem <- struct{}{}:
 			case <-ctx.Done():
-				results[idx] = model.TestResult{
+				res := model.TestResult{
 					Node:   n,
 					Errors: []string{"cancelled"},
 				}
+				results[idx] = res
+				mu.Lock()
+				completed++
+				if onComplete != nil {
+					onComplete(idx, len(nodes), res)
+				}
+				mu.Unlock()
 				return
 			}
-			defer func() { <-sem }()
 
-			results[idx] = r.testNode(ctx, n)
+			res := r.testNode(ctx, n)
+			results[idx] = res
+			
+			<-sem
+
+			mu.Lock()
+			completed++
+			if onComplete != nil {
+				onComplete(idx, len(nodes), res)
+			}
+			mu.Unlock()
 		}(i, node)
 	}
 

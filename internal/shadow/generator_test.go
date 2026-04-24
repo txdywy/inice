@@ -308,3 +308,94 @@ func TestGenerate_RouteRules(t *testing.T) {
 		t.Errorf("rule1 outbound mismatch")
 	}
 }
+
+func TestGenerate_AnyTLS(t *testing.T) {
+	node := model.ProxyNode{
+		Name:                    "HK-AnyTLS",
+		Protocol:                model.ProtoAnyTLS,
+		Address:                 "hk.example.com",
+		Port:                    443,
+		Password:                "8JCsPssfgS8tiRwiMlhARg==",
+		TLS:                     true,
+		SNI:                     "hk.example.com",
+		AnyTLSIdleCheckInterval: "30s",
+		AnyTLSIdleTimeout:       "30s",
+		AnyTLSMinIdleSession:    5,
+	}
+	data, _, err := Generate([]model.ProxyNode{node}, 20000)
+	if err != nil {
+		t.Fatalf("generate failed: %v", err)
+	}
+
+	var cfg map[string]interface{}
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		t.Fatalf("unmarshal config: %v", err)
+	}
+
+	out := cfg["outbounds"].([]interface{})[0].(map[string]interface{})
+	if out["type"] != "anytls" {
+		t.Errorf("expected anytls, got %v", out["type"])
+	}
+	if out["server"] != "hk.example.com" {
+		t.Errorf("server mismatch")
+	}
+	if out["server_port"].(float64) != 443 {
+		t.Errorf("server_port mismatch")
+	}
+	if out["password"] != "8JCsPssfgS8tiRwiMlhARg==" {
+		t.Errorf("password mismatch")
+	}
+	if out["idle_session_check_interval"] != "30s" {
+		t.Errorf("idle_session_check_interval mismatch")
+	}
+	if out["idle_session_timeout"] != "30s" {
+		t.Errorf("idle_session_timeout mismatch")
+	}
+	if out["min_idle_session"].(float64) != 5 {
+		t.Errorf("min_idle_session mismatch")
+	}
+
+	// Check TLS
+	tls := out["tls"].(map[string]interface{})
+	if tls["enabled"] != true {
+		t.Error("tls should be enabled")
+	}
+	if tls["server_name"] != "hk.example.com" {
+		t.Errorf("tls server_name mismatch")
+	}
+}
+
+func TestGenerate_AnyTLS_Minimal(t *testing.T) {
+	node := model.ProxyNode{
+		Name:     "AnyTLS-Min",
+		Protocol: model.ProtoAnyTLS,
+		Address:  "srv.example.com",
+		Port:     443,
+		Password: "pass123",
+		TLS:      true,
+	}
+	data, _, err := Generate([]model.ProxyNode{node}, 20000)
+	if err != nil {
+		t.Fatalf("generate failed: %v", err)
+	}
+
+	var cfg map[string]interface{}
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		t.Fatalf("unmarshal config: %v", err)
+	}
+
+	out := cfg["outbounds"].([]interface{})[0].(map[string]interface{})
+	if out["type"] != "anytls" {
+		t.Errorf("expected anytls, got %v", out["type"])
+	}
+	// Optional fields should not be present
+	if _, ok := out["idle_session_check_interval"]; ok {
+		t.Error("idle_session_check_interval should not be set")
+	}
+	if _, ok := out["idle_session_timeout"]; ok {
+		t.Error("idle_session_timeout should not be set")
+	}
+	if _, ok := out["min_idle_session"]; ok {
+		t.Error("min_idle_session should not be set")
+	}
+}
