@@ -3,7 +3,6 @@ package config
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/spf13/viper"
@@ -59,20 +58,7 @@ func Load(cfgFile string) (*model.UserConfig, error) {
 		return nil, fmt.Errorf("cannot unmarshal config: %w", err)
 	}
 
-	// Ensure config directory exists
-	writeConfigDir()
-
 	return &cfg, nil
-}
-
-// writeConfigDir creates ~/.inice/ if it doesn't exist.
-func writeConfigDir() {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return
-	}
-	dir := filepath.Join(home, ".inice")
-	os.MkdirAll(dir, 0o700)
 }
 
 // ParseTestConfig converts the user config into a TestConfig with parsed duration.

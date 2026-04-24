@@ -24,10 +24,10 @@ Handles local config loading and parsing of PassWall2 UCI output.
 Defines the normalized node model, test result types, and user configuration structures shared across the project.
 
 ### `internal/ssh`
-Wraps SSH connection management and terminal password prompting. The package also contains an SFTP helper for future extension.
+Wraps SSH connection management, terminal password prompting, and the single read-only remote command used by the CLI.
 
 ### `internal/engine`
-Contains probe helpers and a runner for proxy testing workflows. These packages are currently not part of the default CLI path.
+Contains probe helpers and a runner for proxy testing workflows. These packages only create outbound test traffic through an already available SOCKS5 endpoint and are currently not part of the default CLI path.
 
 ### `internal/report`
 Contains render helpers for terminal output.

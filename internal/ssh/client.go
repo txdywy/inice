@@ -69,13 +69,15 @@ func Dial(host string, port int, user string, auth ssh.AuthMethod) (*Client, err
 	return &Client{conn: conn}, nil
 }
 
-// Execute runs a command on the remote host and returns stdout/stderr.
-func (c *Client) Execute(cmd string) (string, string, error) {
-	return c.ExecuteWithContext(context.Background(), cmd)
+const readPassWall2Command = "uci show passwall2"
+
+// ReadPassWall2 runs the only remote command this tool needs. Keep remote
+// execution narrow so inventory reads cannot grow into router mutation paths.
+func (c *Client) ReadPassWall2(ctx context.Context) (string, string, error) {
+	return c.runReadOnly(ctx, readPassWall2Command)
 }
 
-// ExecuteWithContext runs a command with context cancellation support.
-func (c *Client) ExecuteWithContext(ctx context.Context, cmd string) (string, string, error) {
+func (c *Client) runReadOnly(ctx context.Context, cmd string) (string, string, error) {
 	session, err := c.conn.NewSession()
 	if err != nil {
 		return "", "", fmt.Errorf("new session: %w", err)
@@ -86,7 +88,6 @@ func (c *Client) ExecuteWithContext(ctx context.Context, cmd string) (string, st
 	session.Stdout = &stdout
 	session.Stderr = &stderr
 
-	// Handle context cancellation
 	errCh := make(chan error, 1)
 	go func() {
 		errCh <- session.Run(cmd)
@@ -109,9 +110,4 @@ func (c *Client) RemoteAddr() net.Addr {
 // Close closes the SSH connection.
 func (c *Client) Close() error {
 	return c.conn.Close()
-}
-
-// RawClient returns the underlying ssh.Client for use with SFTP.
-func (c *Client) RawClient() *ssh.Client {
-	return c.conn
 }

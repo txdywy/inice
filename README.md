@@ -12,6 +12,7 @@ It currently works in read-only mode:
 
 - SSH connection with password or private key authentication
 - Interactive password prompt when no credential is provided
+- Narrow read-only SSH command path limited to `uci show passwall2`
 - UCI parser for PassWall2 node sections
 - Normalized proxy node model covering Xray, sing-box, Shadowsocks, Hysteria2, TUIC, and NaiveProxy records
 - GitHub Actions workflow for multi-platform builds
@@ -46,7 +47,7 @@ go test ./... -count=1
 
 - `cmd/` — Cobra CLI entry point
 - `internal/config/` — config loading and UCI parsing
-- `internal/ssh/` — SSH and SFTP helpers
+- `internal/ssh/` — SSH connection and read-only remote command helper
 - `internal/model/` — shared domain types
 - `internal/engine/` — probe and runner code
 - `internal/report/` — terminal rendering helpers
