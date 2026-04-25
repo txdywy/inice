@@ -7,6 +7,16 @@ import (
 	"github.com/txdywy/inice/internal/model"
 )
 
+// Generate is a test helper that simulates the old Generate signature
+func Generate(nodes []model.ProxyNode, basePort int) ([]byte, map[int]int, error) {
+	portMap := make(map[int]int, len(nodes))
+	for i := range nodes {
+		portMap[i] = basePort + i
+	}
+	data, err := GenerateSingboxConfig(nodes, portMap)
+	return data, portMap, err
+}
+
 func TestGenerate_EmptyNodes(t *testing.T) {
 	_, _, err := Generate([]model.ProxyNode{}, 20000)
 	if err == nil {
