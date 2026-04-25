@@ -18,7 +18,7 @@ func NewStaticRenderer() *StaticRenderer {
 }
 
 func (r *StaticRenderer) RenderHeader(routerHost string, nodeCount int, coreType string, duration string) {
-	width := 228
+	width := 232
 	fmt.Println(strings.Repeat("─", width))
 	fmt.Printf("  inice - PassWall2 Node Health Report\n")
 	fmt.Printf("  Router: %s | Nodes: %d | Shadow Core: %s | Duration: %s\n", routerHost, nodeCount, coreType, duration)
@@ -27,8 +27,8 @@ func (r *StaticRenderer) RenderHeader(routerHost string, nodeCount int, coreType
 }
 
 func (r *StaticRenderer) RenderTableHeader() {
-	fmt.Println(strings.Repeat("─", 228))
-	// widths: NAME(32) TYPE(10) PROTO(10) ADDRESS(20) PORT(6) LATENCY(8) EXIT IP(16) GEO(4) SCORE(11) GOOGLE(8) NETFLIX(8) CHATGPT(8) GITHUB(8) YOUTUBE(8) TWITTER(8) TELEGRAM(9) INSTAGRAM(10) REDDIT(8) TWITCH(8) IP TYPE(9)
+	fmt.Println(strings.Repeat("─", 232))
+	// widths: NAME(32) TYPE(10) PROTO(10) ADDRESS(20) PORT(6) LATENCY(8) EXIT IP(16) GEO(4) SCORE(15) GOOGLE(8) NETFLIX(8) CHATGPT(8) GITHUB(8) YOUTUBE(8) TWITTER(8) TELEGRAM(9) INSTAGRAM(10) REDDIT(8) TWITCH(8) IP TYPE(9)
 	fmt.Printf("%s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s\n",
 		PadVisual("NAME", 32, true),
 		PadVisual("TYPE", 10, true),
@@ -38,7 +38,7 @@ func (r *StaticRenderer) RenderTableHeader() {
 		PadVisual("LATENCY", 8, true),
 		PadVisual("EXIT IP", 16, true),
 		PadVisual("GEO", 4, true),
-		PadVisual("SCORE", 11, true),
+		PadVisual("PRACTICAL SCORE", 15, true),
 		PadVisual("GOOGLE", 8, true),
 		PadVisual("NETFLIX", 8, true),
 		PadVisual("CHATGPT", 8, true),
@@ -51,7 +51,7 @@ func (r *StaticRenderer) RenderTableHeader() {
 		PadVisual("TWITCH", 8, true),
 		PadVisual("IP TYPE", 9, false),
 	)
-	fmt.Println(strings.Repeat("─", 228))
+	fmt.Println(strings.Repeat("─", 232))
 }
 
 func calculateScore(res model.TestResult) (int, string) {
@@ -59,15 +59,14 @@ func calculateScore(res model.TestResult) (int, string) {
 		return 0, ""
 	}
 
-	// Base Score: 0 (starting fresh for better differentiation)
-	score := 0
+	// 100 Points Total Weightage:
+	// 70% - Unlock Breadth (Success in 10 sites)
+	// 15% - IP Quality (Resident vs Hosting)
+	// 15% - Stability (Basic Connectivity & Decent Latency)
 	
-	// 1. Latency Component (Max 500)
-	// 0ms = 500, 500ms = 0, >500ms = negative
-	score += (500 - int(res.Latency.Avg/time.Millisecond))
+	score := 0.0
 	
-	// 2. Comprehensive Website Unlock Component (Max 1500)
-	// This is now the MAIN driver (150 points per working site)
+	// 1. Unlock Breadth (70 points max)
 	probes := []string{
 		res.Streaming.Google, res.Streaming.Netflix, res.Streaming.ChatGPT, 
 		res.Streaming.GitHub, res.Streaming.YouTube, res.Streaming.Twitter,
@@ -75,39 +74,55 @@ func calculateScore(res model.TestResult) (int, string) {
 	}
 	for _, p := range probes {
 		if strings.HasSuffix(p, "ms") {
-			score += 150 // Strong bonus for fully working sites
-			
-			// Additional speed bonus for very fast site access (<400ms)
-			var ms int
-			fmt.Sscanf(p, "%dms", &ms)
-			if ms < 400 {
-				score += 30
-			}
+			score += 7.0 // Fully working
 		} else if strings.HasPrefix(p, "MAYBE") {
-			score += 50 // Partial credit
+			score += 3.0 // Partial/Slow
 		}
 	}
 	
-	// 3. Resident bonus (Max 100)
-	if !res.ExitIP.Hosting && res.ExitIP.IP != "" {
-		score += 100
+	// 2. IP Quality (15 points max)
+	if res.ExitIP.IP != "" {
+		if !res.ExitIP.Hosting {
+			score += 15.0 // Resident IP (Golden for stability/unlock)
+		} else {
+			score += 5.0  // Hosting IP
+		}
+	}
+
+	// 3. Stability & Latency Bonus (15 points max)
+	// We don't rank based on latency, but extremely high latency or errors are minus points
+	avgMs := float64(res.Latency.Avg / time.Millisecond)
+	if avgMs > 0 {
+		if avgMs < 200 {
+			score += 15.0
+		} else if avgMs < 500 {
+			score += 10.0
+		} else if avgMs < 1000 {
+			score += 5.0
+		}
+	}
+
+	finalScore := int(score)
+	if finalScore > 100 {
+		finalScore = 100
 	}
 
 	trophies := 0
 	switch {
-	case score > 1800:
+	case finalScore >= 90:
 		trophies = 5
-	case score > 1400:
+	case finalScore >= 75:
 		trophies = 4
-	case score > 1000:
+	case finalScore >= 60:
 		trophies = 3
-	case score > 600:
+	case finalScore >= 40:
 		trophies = 2
-	case score > 200:
+	case finalScore >= 10:
 		trophies = 1
 	}
 
-	return score, strings.Repeat("🏆", trophies)
+	scoreText := fmt.Sprintf("%d %s", finalScore, strings.Repeat("🏆", trophies))
+	return finalScore, scoreText
 }
 
 func (r *StaticRenderer) RenderRow(res model.TestResult) {
@@ -135,7 +150,7 @@ func (r *StaticRenderer) RenderRow(res model.TestResult) {
 		ipType = "-"
 	}
 
-	_, trophies := calculateScore(res)
+	_, scoreDisplay := calculateScore(res)
 
 	fmt.Printf("%s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s\n",
 		PadVisual(Truncate(res.Node.Name, 32), 32, true),
@@ -146,7 +161,7 @@ func (r *StaticRenderer) RenderRow(res model.TestResult) {
 		latencyStr,
 		PadVisual(exitIPStr, 16, true),
 		PadVisual(geoStr, 4, true),
-		PadVisual(trophies, 11, true),
+		PadVisual(scoreDisplay, 15, true),
 		StreamingColorStr(res.Streaming.Google, 8),
 		StreamingColorStr(res.Streaming.Netflix, 8),
 		StreamingColorStr(res.Streaming.ChatGPT, 8),
@@ -201,15 +216,15 @@ func (r *StaticRenderer) RenderSummary(results []model.TestResult) error {
 	}
 
 	if len(validResults) > 0 {
-		// Sort by our updated "comprehensive" algorithm
+		// Sort by our new "Practical Primary Node" algorithm
 		sort.Slice(validResults, func(i, j int) bool {
 			si, _ := calculateScore(validResults[i])
 			sj, _ := calculateScore(validResults[j])
-			return si > sj // Higher score first
+			return si > sj // Higher practical score first
 		})
 
-		fmt.Println("\n🏆 TOP 3 BEST NODES (Comprehensive Ranking)")
-		fmt.Println("───────────────────")
+		fmt.Println("\n🏆 TOP 3 PRIMARY NODES (Best for Daily Router Proxying)")
+		fmt.Println("────────────────────────────────────────────────────────")
 		limit := 3
 		if len(validResults) < limit {
 			limit = len(validResults)
@@ -217,11 +232,12 @@ func (r *StaticRenderer) RenderSummary(results []model.TestResult) error {
 		for i := 0; i < limit; i++ {
 			res := validResults[i]
 			medal := []string{"🥇", "🥈", "🥉"}[i]
-			_, trophies := calculateScore(res)
-			fmt.Printf("%s %-32s | %-11s | Avg: %-6s | %s %s\n", 
+			score, trophies := calculateScore(res)
+			fmt.Printf("%s %-32s | %-11s | 评分: %-3d | Avg: %-6s | %s %s\n", 
 				medal, 
 				Truncate(res.Node.Name, 32),
 				trophies,
+				score,
 				fmt.Sprintf("%.0fms", float64(res.Latency.Avg)/float64(time.Millisecond)),
 				CountryToEmoji(res.ExitIP.Country),
 				Truncate(res.ExitIP.ISP, 30),
