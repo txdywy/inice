@@ -28,7 +28,7 @@ func (r *CSVRenderer) RenderTableHeader() {
 		"name", "type", "protocol", "address", "port",
 		"latency_ms", "latency_class", "loss_pct",
 		"exit_ip", "country", "isp", "hosting",
-		"netflix", "chatgpt", "youtube", "disney", "bilibili",
+		"google", "github", "netflix", "chatgpt", "youtube", "twitter", "telegram", "instagram", "reddit", "twitch",
 		"udp_ok", "errors",
 	}
 	r.w.Write(header)
@@ -72,8 +72,11 @@ func (r *CSVRenderer) RenderRow(res model.TestResult) {
 		res.Streaming.Netflix,
 		res.Streaming.ChatGPT,
 		res.Streaming.YouTube,
-		res.Streaming.Disney,
-		res.Streaming.Bilibili,
+		res.Streaming.Twitter,
+		res.Streaming.Telegram,
+		res.Streaming.Instagram,
+		res.Streaming.Reddit,
+		res.Streaming.Twitch,
 		udpOk,
 		joinErrors(res.Errors),
 	}

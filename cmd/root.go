@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -186,10 +188,57 @@ func run(cmd *cobra.Command, args []string) error {
 	renderer.RenderHeader(cfg.Router.Host, len(nodes), "sing-box", "")
 	renderer.RenderTableHeader()
 
+	var mu sync.Mutex
+	var completed int
+	total := len(nodes)
+	doneCh := make(chan struct{})
+
+	isTable := cfg.Output.Format == "table" || cfg.Output.Format == ""
+
+	if isTable {
+		go func() {
+			spinner := []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+			idx := 0
+			for {
+				select {
+				case <-doneCh:
+					return
+				case <-time.After(100 * time.Millisecond):
+					mu.Lock()
+					comp := completed
+					mu.Unlock()
+					
+					barLen := 20
+					filled := 0
+					if total > 0 {
+						filled = int(float64(comp) / float64(total) * float64(barLen))
+					}
+					bar := strings.Repeat("█", filled) + strings.Repeat("░", barLen-filled)
+					
+					fmt.Printf("\r\033[36m%s\033[0m Progress: [\033[32m%s\033[0m] %d/%d ", spinner[idx%len(spinner)], bar, comp, total)
+					idx++
+				}
+			}
+		}()
+	}
+
 	runner := engine.NewRunner(cfg.Router.Host, testCfg)
-	results := runner.RunTests(ctx, nodes, func(idx int, total int, res model.TestResult) {
-		renderer.RenderRow(res)
+	results := runner.RunTests(ctx, nodes, func(idx int, totalNodes int, res model.TestResult) {
+		if isTable {
+			mu.Lock()
+			completed++
+			fmt.Print("\r\033[K") // clear the progress bar line
+			renderer.RenderRow(res)
+			mu.Unlock()
+		} else {
+			renderer.RenderRow(res)
+		}
 	})
+
+	if isTable {
+		close(doneCh)
+		fmt.Print("\r\033[K") // clear progress bar line at the end
+	}
 
 	if err := renderer.RenderSummary(results); err != nil {
 		return fmt.Errorf("render summary: %w", err)

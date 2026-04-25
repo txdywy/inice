@@ -17,7 +17,7 @@ func NewStaticRenderer() *StaticRenderer {
 }
 
 func (r *StaticRenderer) RenderHeader(routerHost string, nodeCount int, coreType string, duration string) {
-	width := 156
+	width := 216
 	fmt.Println(strings.Repeat("─", width))
 	fmt.Printf("  inice - PassWall2 Node Health Report\n")
 	fmt.Printf("  Router: %s | Nodes: %d | Shadow Core: %s | Duration: %s\n", routerHost, nodeCount, coreType, duration)
@@ -26,11 +26,10 @@ func (r *StaticRenderer) RenderHeader(routerHost string, nodeCount int, coreType
 }
 
 func (r *StaticRenderer) RenderTableHeader() {
-	fmt.Println(strings.Repeat("─", 156))
-	// Using manual padding with %s to allow perfect visual alignment even with CJK characters or ANSI codes.
-	// widths: NAME(26) TYPE(10) PROTO(10) ADDRESS(20) PORT(6) LATENCY(8) EXIT IP(16) GEO(4) GOOGLE(8) NETFLIX(8) CHATGPT(8) GITHUB(8) IP TYPE(9)
-	fmt.Printf("%s %s %s %s %s %s %s %s %s %s %s %s %s\n",
-		PadVisual("NAME", 26, true),
+	fmt.Println(strings.Repeat("─", 216))
+	// widths: NAME(32) TYPE(10) PROTO(10) ADDRESS(20) PORT(6) LATENCY(8) EXIT IP(16) GEO(4) GOOGLE(8) NETFLIX(8) CHATGPT(8) GITHUB(8) YOUTUBE(8) TWITTER(8) TELEGRAM(9) INSTAGRAM(10) REDDIT(8) TWITCH(8) IP TYPE(9)
+	fmt.Printf("%s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s\n",
+		PadVisual("NAME", 32, true),
 		PadVisual("TYPE", 10, true),
 		PadVisual("PROTO", 10, true),
 		PadVisual("ADDRESS", 20, true),
@@ -42,9 +41,15 @@ func (r *StaticRenderer) RenderTableHeader() {
 		PadVisual("NETFLIX", 8, true),
 		PadVisual("CHATGPT", 8, true),
 		PadVisual("GITHUB", 8, true),
+		PadVisual("YOUTUBE", 8, true),
+		PadVisual("TWITTER", 8, true),
+		PadVisual("TELEGRAM", 9, true),
+		PadVisual("INSTAGRAM", 10, true),
+		PadVisual("REDDIT", 8, true),
+		PadVisual("TWITCH", 8, true),
 		PadVisual("IP TYPE", 9, false),
 	)
-	fmt.Println(strings.Repeat("─", 156))
+	fmt.Println(strings.Repeat("─", 216))
 }
 
 func (r *StaticRenderer) RenderRow(res model.TestResult) {
@@ -72,8 +77,8 @@ func (r *StaticRenderer) RenderRow(res model.TestResult) {
 		ipType = "-"
 	}
 
-	fmt.Printf("%s %s %s %s %s %s %s %s %s %s %s %s %s\n",
-		PadVisual(Truncate(res.Node.Name, 26), 26, true),
+	fmt.Printf("%s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s\n",
+		PadVisual(Truncate(res.Node.Name, 32), 32, true),
 		PadVisual(Truncate(string(res.Node.Type), 10), 10, true),
 		PadVisual(Truncate(string(res.Node.Protocol), 10), 10, true),
 		PadVisual(Truncate(res.Node.Address, 20), 20, true),
@@ -85,6 +90,12 @@ func (r *StaticRenderer) RenderRow(res model.TestResult) {
 		StreamingColorStr(res.Streaming.Netflix, 8),
 		StreamingColorStr(res.Streaming.ChatGPT, 8),
 		StreamingColorStr(res.Streaming.GitHub, 8),
+		StreamingColorStr(res.Streaming.YouTube, 8),
+		StreamingColorStr(res.Streaming.Twitter, 8),
+		StreamingColorStr(res.Streaming.Telegram, 9),
+		StreamingColorStr(res.Streaming.Instagram, 10),
+		StreamingColorStr(res.Streaming.Reddit, 8),
+		StreamingColorStr(res.Streaming.Twitch, 8),
 		PadVisual(ipType, 9, false),
 	)
 }

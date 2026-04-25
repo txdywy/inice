@@ -133,13 +133,16 @@ type DNSLeakResult struct {
 
 // StreamingResult holds streaming/geo-unlock test results.
 type StreamingResult struct {
-	Google   string // "YES", "NO", "MAYBE", "ERROR"
-	GitHub   string
-	Netflix  string
-	ChatGPT  string
-	YouTube  string
-	Disney   string
-	Bilibili string
+	Google    string // "YES", "NO", "MAYBE", "ERROR" or "xxxms"
+	GitHub    string
+	Netflix   string
+	ChatGPT   string
+	YouTube   string
+	Twitter   string
+	Telegram  string
+	Instagram string
+	Reddit    string
+	Twitch    string
 }
 
 // TestResult aggregates all probe results for a single proxy node.

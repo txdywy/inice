@@ -14,13 +14,16 @@ import (
 // accessibility through the proxy.
 func Streaming(ctx context.Context, client *http.Client) model.StreamingResult {
 	result := model.StreamingResult{
-		Google:   "ERROR",
-		GitHub:   "ERROR",
-		Netflix:  "ERROR",
-		ChatGPT:  "ERROR",
-		YouTube:  "ERROR",
-		Disney:   "ERROR",
-		Bilibili: "ERROR",
+		Google:    "ERROR",
+		GitHub:    "ERROR",
+		Netflix:   "ERROR",
+		ChatGPT:   "ERROR",
+		YouTube:   "ERROR",
+		Twitter:   "ERROR",
+		Telegram:  "ERROR",
+		Instagram: "ERROR",
+		Reddit:    "ERROR",
+		Twitch:    "ERROR",
 	}
 
 	checks := []struct {
@@ -32,9 +35,12 @@ func Streaming(ctx context.Context, client *http.Client) model.StreamingResult {
 		{"GitHub", "https://github.com/", func(v string) { result.GitHub = v }},
 		{"Netflix", "https://www.netflix.com/title/80018499", func(v string) { result.Netflix = v }},
 		{"ChatGPT", "https://chat.openai.com/", func(v string) { result.ChatGPT = v }},
-		{"YouTube", "https://www.youtube.com/", func(v string) { result.YouTube = v }},
-		{"Disney", "https://www.disneyplus.com/", func(v string) { result.Disney = v }},
-		{"Bilibili", "https://www.bilibili.com/", func(v string) { result.Bilibili = v }},
+		{"YouTube", "https://www.youtube.com/generate_204", func(v string) { result.YouTube = v }},
+		{"Twitter", "https://twitter.com/robots.txt", func(v string) { result.Twitter = v }},
+		{"Telegram", "https://web.telegram.org/", func(v string) { result.Telegram = v }},
+		{"Instagram", "https://www.instagram.com/robots.txt", func(v string) { result.Instagram = v }},
+		{"Reddit", "https://www.reddit.com/robots.txt", func(v string) { result.Reddit = v }},
+		{"Twitch", "https://www.twitch.tv/", func(v string) { result.Twitch = v }},
 	}
 
 	var wg sync.WaitGroup
