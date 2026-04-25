@@ -19,6 +19,11 @@ type Renderer interface {
 func VisualLength(s string) int {
 	w := 0
 	for _, r := range s {
+		// Regional Indicator Symbols (used for flags) are usually 2 runes = 2 cells
+		if r >= 0x1f1e6 && r <= 0x1f1ff {
+			w += 1
+			continue
+		}
 		// Basic Emoji and CJK ranges
 		if (r >= 0x1100 && r <= 0x115f) || r == 0x2329 || r == 0x232a ||
 			(r >= 0x2e80 && r <= 0xa4cf && r != 0x303f) ||
@@ -28,7 +33,7 @@ func VisualLength(s string) int {
 			(r >= 0xfe30 && r <= 0xfe6f) ||
 			(r >= 0xff00 && r <= 0xff60) ||
 			(r >= 0xffe0 && r <= 0xffe6) ||
-			(r >= 0x1f000 && r <= 0x1f9ff) || // Emojis
+			(r >= 0x1f000 && r <= 0x1f9ff) || // Most Emojis (including trophies)
 			(r >= 0x20000 && r <= 0x2fffd) ||
 			(r >= 0x30000 && r <= 0x3fffd) {
 			w += 2
