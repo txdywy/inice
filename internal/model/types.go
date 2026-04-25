@@ -55,6 +55,7 @@ type ProxyNode struct {
 	SNI        string
 	ALPN       []string
 	Fingerprint string
+	Insecure    bool
 	// Sing-box specific
 	Hysteria2UpMbps     int
 	Hysteria2DownMbps   int

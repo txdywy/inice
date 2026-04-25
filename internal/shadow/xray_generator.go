@@ -95,8 +95,12 @@ func GenerateXrayConfig(nodes []model.ProxyNode, portMap map[int]int) ([]byte, e
 			streamSettings["network"] = node.Transport
 			switch node.Transport {
 			case "ws":
+				wsPath := node.WSPath
+				if wsPath == "" {
+					wsPath = "/"
+				}
 				streamSettings["wsSettings"] = map[string]interface{}{
-					"path": node.WSPath,
+					"path": wsPath,
 				}
 				if node.WSHost != "" {
 					streamSettings["wsSettings"].(map[string]interface{})["headers"] = map[string]string{
@@ -109,16 +113,31 @@ func GenerateXrayConfig(nodes []model.ProxyNode, portMap map[int]int) ([]byte, e
 				}
 			case "httpupgrade":
 				streamSettings["network"] = "httpupgrade"
-				streamSettings["httpupgradeSettings"] = map[string]interface{}{
-					"path": node.WSPath,
-					"host": node.WSHost,
+				path := node.WSPath
+				if path == "" {
+					path = "/"
 				}
+				httpSettings := map[string]interface{}{
+					"path": path,
+				}
+				if node.WSHost != "" {
+					httpSettings["host"] = node.WSHost
+				}
+				streamSettings["httpupgradeSettings"] = httpSettings
 			case "xhttp":
 				streamSettings["network"] = "xhttp"
-				streamSettings["xhttpSettings"] = map[string]interface{}{
-					"path": node.WSPath,
-					"host": node.WSHost,
+				path := node.WSPath
+				if path == "" {
+					path = "/"
 				}
+				xhttpSettings := map[string]interface{}{
+					"path": path,
+					"mode": "auto",
+				}
+				if node.WSHost != "" {
+					xhttpSettings["host"] = node.WSHost
+				}
+				streamSettings["xhttpSettings"] = xhttpSettings
 			}
 		}
 

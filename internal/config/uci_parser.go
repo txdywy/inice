@@ -207,9 +207,27 @@ func normalizeSingBoxNode(n model.ProxyNode, props map[string]string) (model.Pro
 	n.Transport = props["transport"]
 	n.WSHost = props["ws_host"]
 	n.WSPath = props["ws_path"]
+	if n.Transport == "xhttp" {
+		if path := props["xhttp_path"]; path != "" {
+			n.WSPath = path
+		}
+		if host := props["xhttp_host"]; host != "" {
+			n.WSHost = host
+		}
+	}
 	n.SNI = props["tls_serverName"]
+	if props["tls_disable_sni"] == "1" {
+		n.SNI = ""
+	}
 	n.Fingerprint = props["fingerprint"]
+	n.Insecure = props["tls_allowInsecure"] == "1" || props["tls_allowInsecure"] == "true"
 	n.SSMethod = props["ss_method"]
+
+	if alpn := props["alpn"]; alpn != "" {
+		n.ALPN = strings.Split(alpn, ",")
+	} else if alpn := props["tuic_alpn"]; alpn != "" {
+		n.ALPN = strings.Split(alpn, ",")
+	}
 
 	// Hysteria2 fields
 	n.Hysteria2UpMbps, _ = strconv.Atoi(props["hysteria2_up_mbps"])

@@ -223,6 +223,10 @@ func addTLS(node model.ProxyNode, out map[string]interface{}) {
 		"enabled": true,
 	}
 
+	if node.Insecure {
+		tls["insecure"] = true
+	}
+
 	if node.SNI != "" {
 		// sing-box uses "server_name" instead of "sni" in outbound tls
 		tls["server_name"] = node.SNI
@@ -272,9 +276,11 @@ func addTransport(node model.ProxyNode, out map[string]interface{}) {
 
 	switch node.Transport {
 	case "ws":
-		if node.WSPath != "" {
-			transport["path"] = node.WSPath
+		path := node.WSPath
+		if path == "" {
+			path = "/"
 		}
+		transport["path"] = path
 		if node.WSHost != "" {
 			transport["headers"] = map[string]string{
 				"Host": node.WSHost,
@@ -292,9 +298,11 @@ func addTransport(node model.ProxyNode, out map[string]interface{}) {
 		transport["ping_timeout"] = "20s"
 
 	case "httpupgrade":
-		if node.WSPath != "" {
-			transport["path"] = node.WSPath
+		path := node.WSPath
+		if path == "" {
+			path = "/"
 		}
+		transport["path"] = path
 		if node.WSHost != "" {
 			transport["host"] = node.WSHost
 		}
