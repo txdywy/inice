@@ -55,51 +55,57 @@ func (r *StaticRenderer) RenderTableHeader() {
 }
 
 func calculateScore(res model.TestResult) (int, string) {
-	if res.Latency.Avg == 0 {
+	if res.Latency.Avg == 0 && res.Latency.Loss >= 1.0 {
 		return 0, ""
 	}
 
-	// 100 Points Total Weightage:
-	// 70% - Unlock Breadth (Success in 10 sites)
-	// 15% - IP Quality (Resident vs Hosting)
-	// 15% - Stability (Basic Connectivity & Decent Latency)
+	// 100 Points Practical Algorithm:
+	// 80% - Multi-Site Performance (8 pts max per site x 10 sites)
+	// 10% - IP quality (Resident Bonus)
+	// 10% - Basic Stability (Packet loss penalty)
 	
 	score := 0.0
 	
-	// 1. Unlock Breadth (70 points max)
+	// 1. Multi-Site Performance (80 points max)
 	probes := []string{
 		res.Streaming.Google, res.Streaming.Netflix, res.Streaming.ChatGPT, 
 		res.Streaming.GitHub, res.Streaming.YouTube, res.Streaming.Twitter,
 		res.Streaming.Telegram, res.Streaming.Instagram, res.Streaming.Reddit, res.Streaming.Twitch,
 	}
+	
 	for _, p := range probes {
 		if strings.HasSuffix(p, "ms") {
-			score += 7.0 // Fully working
+			var ms int
+			fmt.Sscanf(p, "%dms", &ms)
+			
+			// Base points for working
+			siteScore := 5.0
+			
+			// Speed bonus for this specific site
+			switch {
+			case ms < 600:
+				siteScore += 3.0 // Fast
+			case ms < 1200:
+				siteScore += 2.0 // Normal
+			case ms < 2000:
+				siteScore += 1.0 // Acceptable
+			}
+			score += siteScore
 		} else if strings.HasPrefix(p, "MAYBE") {
-			score += 3.0 // Partial/Slow
+			score += 2.0 // Pingable but not fully functional
 		}
 	}
 	
-	// 2. IP Quality (15 points max)
-	if res.ExitIP.IP != "" {
-		if !res.ExitIP.Hosting {
-			score += 15.0 // Resident IP (Golden for stability/unlock)
-		} else {
-			score += 5.0  // Hosting IP
-		}
+	// 2. IP Quality (10 points max)
+	if res.ExitIP.IP != "" && !res.ExitIP.Hosting {
+		score += 10.0 // Resident IP
 	}
 
-	// 3. Stability & Latency Bonus (15 points max)
-	// We don't rank based on latency, but extremely high latency or errors are minus points
-	avgMs := float64(res.Latency.Avg / time.Millisecond)
-	if avgMs > 0 {
-		if avgMs < 200 {
-			score += 15.0
-		} else if avgMs < 500 {
-			score += 10.0
-		} else if avgMs < 1000 {
-			score += 5.0
-		}
+	// 3. Stability Bonus (10 points max)
+	if res.Latency.Loss < 0.1 {
+		score += 10.0
+	} else if res.Latency.Loss < 0.3 {
+		score += 5.0
 	}
 
 	finalScore := int(score)
@@ -115,7 +121,7 @@ func calculateScore(res model.TestResult) (int, string) {
 		trophies = 4
 	case finalScore >= 60:
 		trophies = 3
-	case finalScore >= 40:
+	case finalScore >= 35:
 		trophies = 2
 	case finalScore >= 10:
 		trophies = 1
@@ -210,20 +216,20 @@ func (r *StaticRenderer) RenderSummary(results []model.TestResult) error {
 	// Top 3 Nodes Selection
 	validResults := make([]model.TestResult, 0)
 	for _, res := range results {
-		if res.Latency.Avg > 0 {
+		if res.Latency.Avg > 0 || res.ExitIP.IP != "" {
 			validResults = append(validResults, res)
 		}
 	}
 
 	if len(validResults) > 0 {
-		// Sort by our new "Practical Primary Node" algorithm
+		// Sort by our new "Practical & Multi-site Performance" algorithm
 		sort.Slice(validResults, func(i, j int) bool {
 			si, _ := calculateScore(validResults[i])
 			sj, _ := calculateScore(validResults[j])
-			return si > sj // Higher practical score first
+			return si > sj // Higher score first
 		})
 
-		fmt.Println("\n🏆 TOP 3 PRIMARY NODES (Best for Daily Router Proxying)")
+		fmt.Println("\n🏆 TOP 3 PRIMARY NODES (Practical Comprehensive Ranking)")
 		fmt.Println("────────────────────────────────────────────────────────")
 		limit := 3
 		if len(validResults) < limit {
