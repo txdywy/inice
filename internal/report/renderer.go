@@ -72,7 +72,7 @@ func Truncate(s string, max int) string {
 	return sb.String()
 }
 
-// StreamingColorStr formats streaming results (latency or error state) and pads it.
+// StreamingColorStr formats streaming results (latency or error state) and pads it with color-coding.
 func StreamingColorStr(status string, width int) string {
 	var color, text string
 	if status == "ERROR" {
@@ -85,8 +85,17 @@ func StreamingColorStr(status string, width int) string {
 		color = "\033[33m" // yellow
 		text = status
 	} else if strings.HasSuffix(status, "ms") {
-		color = "\033[32m" // green
 		text = status
+		// Extract number to decide color
+		var ms int
+		fmt.Sscanf(status, "%dms", &ms)
+		if ms < 400 {
+			color = "\033[32m" // green (fast)
+		} else if ms < 800 {
+			color = "\033[33m" // yellow (moderate)
+		} else {
+			color = "\033[38;5;214m" // orange/red (slow)
+		}
 	} else {
 		color = "\033[90m" // gray
 		text = status

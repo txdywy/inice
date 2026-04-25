@@ -2,6 +2,7 @@ package report
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -125,11 +126,55 @@ func (r *StaticRenderer) RenderSummary(results []model.TestResult) error {
 
 	fmt.Println("\nSUMMARY")
 	fmt.Println("───────")
-	fmt.Printf("🟢 Excellent (<90ms):  %d nodes\n", excellent)
-	fmt.Printf("🟡 Good (90-150ms):    %d nodes\n", good)
+	fmt.Printf("🟢 Excellent (<90ms):   %d nodes\n", excellent)
+	fmt.Printf("🟡 Good (90-150ms):     %d nodes\n", good)
 	fmt.Printf("🟠 Moderate (150-250ms): %d nodes\n", moderate)
-	fmt.Printf("🔴 Poor (>250ms/error):  %d nodes\n", poor)
-	fmt.Printf("\nDNS Leaks: %d/%d | Streaming Loss: check above\n", dnsLeaks, len(results))
+	fmt.Printf("🔴 Poor (>250ms/error):   %d nodes\n", poor)
+	fmt.Printf("\nDNS Leaks: %d/%d | UDP Support: %d/%d\n", dnsLeaks, len(results), udpOK, len(results))
+
+	// Top 3 Nodes Selection
+	validResults := make([]model.TestResult, 0)
+	for _, res := range results {
+		if res.Latency.Avg > 0 {
+			validResults = append(validResults, res)
+		}
+	}
+
+	if len(validResults) > 0 {
+		// Sort by a "score" (primarily avg latency, with penalty for missing unlocks)
+		sort.Slice(validResults, func(i, j int) bool {
+			score := func(res model.TestResult) float64 {
+				s := float64(res.Latency.Avg)
+				// Small penalty for every ERROR or NO in streaming to favor fully working nodes
+				probes := []string{res.Streaming.Google, res.Streaming.Netflix, res.Streaming.ChatGPT, res.Streaming.YouTube, res.Streaming.GitHub}
+				for _, p := range probes {
+					if p == "ERROR" || p == "NO" || strings.HasPrefix(p, "MAYBE") {
+						s += float64(200 * time.Millisecond)
+					}
+				}
+				return s
+			}
+			return score(validResults[i]) < score(validResults[j])
+		})
+
+		fmt.Println("\n🏆 TOP 3 BEST NODES")
+		fmt.Println("───────────────────")
+		limit := 3
+		if len(validResults) < limit {
+			limit = len(validResults)
+		}
+		for i := 0; i < limit; i++ {
+			res := validResults[i]
+			medal := []string{"🥇", "🥈", "🥉"}[i]
+			fmt.Printf("%s %-32s | Avg: %-6s | %s %s\n", 
+				medal, 
+				Truncate(res.Node.Name, 32), 
+				fmt.Sprintf("%.0fms", float64(res.Latency.Avg)/float64(time.Millisecond)),
+				CountryToEmoji(res.ExitIP.Country),
+				Truncate(res.ExitIP.ISP, 30),
+			)
+		}
+	}
 
 	return nil
 }
