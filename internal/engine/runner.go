@@ -96,13 +96,27 @@ func (r *Runner) testNode(ctx context.Context, node model.ProxyNode) model.TestR
 		result.Latency = latency
 	}
 
-	// 2. Exit IP probe
-	result.ExitIP = probes.ExitIP(ctx, httpClient)
+	// 2 & 4. Exit IP and Streaming probes run concurrently to save time
+	var exitIP model.IPInfo
+	var streaming model.StreamingResult
+	var wgProbe sync.WaitGroup
+	wgProbe.Add(2)
 
-	// 3. DNS leak probe (skipped for MVP - requires raw SOCKS5 dialer)
+	go func() {
+		defer wgProbe.Done()
+		exitIP = probes.ExitIP(ctx, httpClient)
+	}()
 
-	// 4. Streaming probe
-	result.Streaming = probes.Streaming(ctx, httpClient)
+	go func() {
+		defer wgProbe.Done()
+		streaming = probes.Streaming(ctx, httpClient)
+	}()
+
+	wgProbe.Wait()
+	result.ExitIP = exitIP
+	result.Streaming = streaming
+
+	// 3. DNS leak probe (skipped for MVP)
 
 	// 5. IP purity probe (use exit IP)
 	if result.ExitIP.IP != "" {

@@ -28,15 +28,16 @@ func (r *StaticRenderer) RenderHeader(routerHost string, nodeCount int, coreType
 func (r *StaticRenderer) RenderTableHeader() {
 	fmt.Println(strings.Repeat("─", 156))
 	// Using manual padding with %s to allow perfect visual alignment even with CJK characters or ANSI codes.
-	// widths: NAME(26) TYPE(10) PROTO(10) ADDRESS(20) PORT(6) LATENCY(8) EXIT IP(18) GOOGLE(8) NETFLIX(8) CHATGPT(8) GITHUB(8) IP TYPE(9)
-	fmt.Printf("%s %s %s %s %s %s %s %s %s %s %s %s\n",
+	// widths: NAME(26) TYPE(10) PROTO(10) ADDRESS(20) PORT(6) LATENCY(8) EXIT IP(16) GEO(4) GOOGLE(8) NETFLIX(8) CHATGPT(8) GITHUB(8) IP TYPE(9)
+	fmt.Printf("%s %s %s %s %s %s %s %s %s %s %s %s %s\n",
 		PadVisual("NAME", 26, true),
 		PadVisual("TYPE", 10, true),
 		PadVisual("PROTO", 10, true),
 		PadVisual("ADDRESS", 20, true),
 		PadVisual("PORT", 6, true),
 		PadVisual("LATENCY", 8, true),
-		PadVisual("EXIT IP", 18, true),
+		PadVisual("EXIT IP", 16, true),
+		PadVisual("GEO", 4, true),
 		PadVisual("GOOGLE", 8, true),
 		PadVisual("NETFLIX", 8, true),
 		PadVisual("CHATGPT", 8, true),
@@ -53,12 +54,14 @@ func (r *StaticRenderer) RenderRow(res model.TestResult) {
 	}
 	latencyStr := LatencyColor(res.Latency.Class) + PadVisual(latencyText, 8, true) + "\033[0m"
 
-	exitIPStr := Truncate(res.ExitIP.IP, 15)
+	exitIPStr := Truncate(res.ExitIP.IP, 16)
 	if exitIPStr == "" {
 		exitIPStr = "-"
 	}
+	
+	geoStr := "-"
 	if res.ExitIP.Country != "" {
-		exitIPStr += " " + CountryToEmoji(res.ExitIP.Country)
+		geoStr = CountryToEmoji(res.ExitIP.Country)
 	}
 
 	ipType := "RESIDENT"
@@ -69,14 +72,15 @@ func (r *StaticRenderer) RenderRow(res model.TestResult) {
 		ipType = "-"
 	}
 
-	fmt.Printf("%s %s %s %s %s %s %s %s %s %s %s %s\n",
+	fmt.Printf("%s %s %s %s %s %s %s %s %s %s %s %s %s\n",
 		PadVisual(Truncate(res.Node.Name, 26), 26, true),
 		PadVisual(Truncate(string(res.Node.Type), 10), 10, true),
 		PadVisual(Truncate(string(res.Node.Protocol), 10), 10, true),
 		PadVisual(Truncate(res.Node.Address, 20), 20, true),
 		PadVisual(fmt.Sprintf("%d", res.Node.Port), 6, true),
 		latencyStr,
-		PadVisual(Truncate(exitIPStr, 18), 18, true),
+		PadVisual(exitIPStr, 16, true),
+		PadVisual(geoStr, 4, true),
 		StreamingColorStr(res.Streaming.Google, 8),
 		StreamingColorStr(res.Streaming.Netflix, 8),
 		StreamingColorStr(res.Streaming.ChatGPT, 8),

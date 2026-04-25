@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/txdywy/inice/internal/model"
@@ -36,10 +37,25 @@ func Streaming(ctx context.Context, client *http.Client) model.StreamingResult {
 		{"Bilibili", "https://www.bilibili.com/", func(v string) { result.Bilibili = v }},
 	}
 
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+
 	for _, check := range checks {
-		status := checkStreaming(ctx, client, check.url)
-		check.set(status)
+		wg.Add(1)
+		go func(c struct {
+			name string
+			url  string
+			set  func(string)
+		}) {
+			defer wg.Done()
+			status := checkStreaming(ctx, client, c.url)
+			mu.Lock()
+			c.set(status)
+			mu.Unlock()
+		}(check)
 	}
+
+	wg.Wait()
 
 	return result
 }
