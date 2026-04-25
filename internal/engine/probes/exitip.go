@@ -17,11 +17,12 @@ const (
 )
 
 type ipSBResponse struct {
-	IP      string `json:"ip"`
-	Country string `json:"country"`
-	City    string `json:"city"`
-	ISP     string `json:"isp"`
-	ASN     int    `json:"asn"`
+	IP          string `json:"ip"`
+	Country     string `json:"country"`
+	CountryCode string `json:"country_code"`
+	City        string `json:"city"`
+	ISP         string `json:"isp"`
+	ASN         int    `json:"asn"`
 }
 
 // ExitIP detects the proxy's exit IP through Cloudflare trace and ip.sb.
@@ -59,7 +60,11 @@ func ExitIP(ctx context.Context, client *http.Client) model.IPInfo {
 	if info.IP == "" {
 		info.IP = geo.IP
 	}
-	info.Country = geo.Country
+	if geo.CountryCode != "" {
+		info.Country = geo.CountryCode
+	} else if geo.Country != "" {
+		info.Country = geo.Country
+	}
 	info.City = geo.City
 	info.ISP = geo.ISP
 	info.ASN = fmt.Sprintf("AS%d", geo.ASN)

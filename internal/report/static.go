@@ -17,7 +17,7 @@ func NewStaticRenderer() *StaticRenderer {
 }
 
 func (r *StaticRenderer) RenderHeader(routerHost string, nodeCount int, coreType string, duration string) {
-	width := 140
+	width := 156
 	fmt.Println(strings.Repeat("─", width))
 	fmt.Printf("  inice - PassWall2 Node Health Report\n")
 	fmt.Printf("  Router: %s | Nodes: %d | Shadow Core: %s | Duration: %s\n", routerHost, nodeCount, coreType, duration)
@@ -26,24 +26,39 @@ func (r *StaticRenderer) RenderHeader(routerHost string, nodeCount int, coreType
 }
 
 func (r *StaticRenderer) RenderTableHeader() {
-	fmt.Println(strings.Repeat("─", 140))
-	fmt.Printf("%-16s %-10s %-10s %-20s %8s %-18s %-8s %-8s %-8s %-8s %9s\n",
-		"NAME", "TYPE", "PROTO", "ADDRESS", "LATENCY", "EXIT IP", "GOOGLE", "NETFLIX", "CHATGPT", "GITHUB", "IP TYPE")
-	fmt.Println(strings.Repeat("─", 140))
+	fmt.Println(strings.Repeat("─", 156))
+	// Using manual padding with %s to allow perfect visual alignment even with CJK characters or ANSI codes.
+	// widths: NAME(26) TYPE(10) PROTO(10) ADDRESS(20) PORT(6) LATENCY(8) EXIT IP(18) GOOGLE(8) NETFLIX(8) CHATGPT(8) GITHUB(8) IP TYPE(9)
+	fmt.Printf("%s %s %s %s %s %s %s %s %s %s %s %s\n",
+		PadVisual("NAME", 26, true),
+		PadVisual("TYPE", 10, true),
+		PadVisual("PROTO", 10, true),
+		PadVisual("ADDRESS", 20, true),
+		PadVisual("PORT", 6, true),
+		PadVisual("LATENCY", 8, true),
+		PadVisual("EXIT IP", 18, true),
+		PadVisual("GOOGLE", 8, true),
+		PadVisual("NETFLIX", 8, true),
+		PadVisual("CHATGPT", 8, true),
+		PadVisual("GITHUB", 8, true),
+		PadVisual("IP TYPE", 9, false),
+	)
+	fmt.Println(strings.Repeat("─", 156))
 }
 
 func (r *StaticRenderer) RenderRow(res model.TestResult) {
-	latencyStr := fmt.Sprintf("%s%.0fms\033[0m", LatencyColor(res.Latency.Class), float64(res.Latency.Avg)/float64(time.Millisecond))
+	latencyText := fmt.Sprintf("%.0fms", float64(res.Latency.Avg)/float64(time.Millisecond))
 	if res.Latency.Class == model.LatencyPoor && res.Latency.Avg == 0 {
-		latencyStr = "\033[31mERROR\033[0m"
+		latencyText = "ERR"
 	}
+	latencyStr := LatencyColor(res.Latency.Class) + PadVisual(latencyText, 8, true) + "\033[0m"
 
 	exitIPStr := Truncate(res.ExitIP.IP, 15)
 	if exitIPStr == "" {
 		exitIPStr = "-"
 	}
 	if res.ExitIP.Country != "" {
-		exitIPStr += " " + res.ExitIP.Country
+		exitIPStr += " " + CountryToEmoji(res.ExitIP.Country)
 	}
 
 	ipType := "RESIDENT"
@@ -54,18 +69,19 @@ func (r *StaticRenderer) RenderRow(res model.TestResult) {
 		ipType = "-"
 	}
 
-	fmt.Printf("%-16s %-10s %-10s %-20s %s %-18s %-8s %-8s %-8s %-8s %9s\n",
-		Truncate(res.Node.Name, 16),
-		Truncate(string(res.Node.Type), 10),
-		Truncate(string(res.Node.Protocol), 10),
-		Truncate(res.Node.Address, 20),
+	fmt.Printf("%s %s %s %s %s %s %s %s %s %s %s %s\n",
+		PadVisual(Truncate(res.Node.Name, 26), 26, true),
+		PadVisual(Truncate(string(res.Node.Type), 10), 10, true),
+		PadVisual(Truncate(string(res.Node.Protocol), 10), 10, true),
+		PadVisual(Truncate(res.Node.Address, 20), 20, true),
+		PadVisual(fmt.Sprintf("%d", res.Node.Port), 6, true),
 		latencyStr,
-		Truncate(exitIPStr, 18),
-		YesNoIcon(res.Streaming.Google),
-		YesNoIcon(res.Streaming.Netflix),
-		YesNoIcon(res.Streaming.ChatGPT),
-		YesNoIcon(res.Streaming.GitHub),
-		ipType,
+		PadVisual(Truncate(exitIPStr, 18), 18, true),
+		StreamingColorStr(res.Streaming.Google, 8),
+		StreamingColorStr(res.Streaming.Netflix, 8),
+		StreamingColorStr(res.Streaming.ChatGPT, 8),
+		StreamingColorStr(res.Streaming.GitHub, 8),
+		PadVisual(ipType, 9, false),
 	)
 }
 

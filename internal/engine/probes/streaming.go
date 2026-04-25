@@ -68,11 +68,14 @@ func checkStreaming(ctx context.Context, client *http.Client, url string) string
 		},
 	}
 
+	start := time.Now()
 	resp, err := clientNoRedirect.Do(req)
 	if err != nil {
 		return "ERROR"
 	}
 	defer resp.Body.Close()
+
+	latencyMs := int(time.Since(start).Milliseconds())
 
 	switch resp.StatusCode {
 	case 200, 204, 301, 302, 307, 308, 405:
@@ -82,9 +85,9 @@ func checkStreaming(ctx context.Context, client *http.Client, url string) string
 		location := resp.Header.Get("Location")
 		if location != "" {
 			_ = location
-			return "YES"
+			return fmt.Sprintf("%dms", latencyMs)
 		}
-		return "YES"
+		return fmt.Sprintf("%dms", latencyMs)
 	case 403:
 		return "NO"
 	case 451:
