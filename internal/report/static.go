@@ -54,7 +54,7 @@ func (r *StaticRenderer) RenderTableHeader() {
 	fmt.Println(strings.Repeat("─", 242))
 }
 
-func calculateScore(res model.TestResult) (int, string) {
+func CalculateScore(res model.TestResult) (int, string) {
 	if res.Latency.Avg == 0 && res.Latency.Loss >= 1.0 {
 		return 0, ""
 	}
@@ -156,7 +156,7 @@ func (r *StaticRenderer) RenderRow(res model.TestResult) {
 		ipType = "-"
 	}
 
-	_, scoreDisplay := calculateScore(res)
+	_, scoreDisplay := CalculateScore(res)
 
 	fmt.Printf("%s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s\n",
 		PadVisual(Truncate(res.Node.Name, 32), 32, true),
@@ -224,8 +224,8 @@ func (r *StaticRenderer) RenderSummary(results []model.TestResult) error {
 	if len(validResults) > 0 {
 		// Sort by our new "Practical & Multi-site Performance" algorithm
 		sort.Slice(validResults, func(i, j int) bool {
-			si, _ := calculateScore(validResults[i])
-			sj, _ := calculateScore(validResults[j])
+			si, _ := CalculateScore(validResults[i])
+			sj, _ := CalculateScore(validResults[j])
 			return si > sj // Higher score first
 		})
 
@@ -238,7 +238,7 @@ func (r *StaticRenderer) RenderSummary(results []model.TestResult) error {
 		for i := 0; i < limit; i++ {
 			res := validResults[i]
 			medal := []string{"🥇", "🥈", "🥉"}[i]
-			score, trophies := calculateScore(res)
+			score, trophies := CalculateScore(res)
 			
 			// Just use trophies without the score prefix for the summary trophies column
 			justTrophies := ""

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"sort"
 	"strings"
 	"sync"
 	"syscall"
@@ -186,7 +187,6 @@ func run(cmd *cobra.Command, args []string) error {
 	fmt.Printf("Running tests (concurrency=%d, timeout=%s)...\n", testCfg.Concurrency, testCfg.Timeout)
 	
 	renderer.RenderHeader(cfg.Router.Host, len(nodes), "sing-box", "")
-	renderer.RenderTableHeader()
 
 	var mu sync.Mutex
 	var completed int
@@ -226,12 +226,40 @@ func run(cmd *cobra.Command, args []string) error {
 	}
 
 	runner := engine.NewRunner(cfg.Router.Host, testCfg)
+	var activeResults []model.TestResult
+	
 	results := runner.RunTests(ctx, nodes, func(idx int, totalNodes int, res model.TestResult) {
 		if isTable {
 			mu.Lock()
 			completed++
-			fmt.Print("\r\033[K") // clear the progress bar line
-			renderer.RenderRow(res)
+			
+			// 1. Add to active list
+			activeResults = append(activeResults, res)
+			
+			// 2. Sort active results by score (descending)
+			sort.Slice(activeResults, func(i, j int) bool {
+				si, _ := report.CalculateScore(activeResults[i])
+				sj, _ := report.CalculateScore(activeResults[j])
+				return si > sj
+			})
+			
+			// 3. Clear previously printed table rows (including progress bar)
+			// Each result completion redraws the table header and all rows.
+			// Move cursor up: 1 (progress bar) + len(activeResults)-1 (previous rows) + 3 (table header)
+			if completed > 1 {
+				linesToMove := (completed - 1) + 3 + 1
+				fmt.Printf("\033[%dA\033[J", linesToMove)
+			} else {
+				// For the very first row, just clear the progress bar
+				fmt.Print("\r\033[K")
+			}
+			
+			// 4. Redraw table header and all sorted rows
+			renderer.RenderTableHeader()
+			for _, r := range activeResults {
+				renderer.RenderRow(r)
+			}
+			
 			mu.Unlock()
 		} else {
 			renderer.RenderRow(res)
@@ -242,6 +270,9 @@ func run(cmd *cobra.Command, args []string) error {
 		close(doneCh)
 		fmt.Print("\r\033[K") // clear progress bar line at the end
 	}
+
+	// Final results should be the sorted ones
+	results = activeResults
 
 	if err := renderer.RenderSummary(results); err != nil {
 		return fmt.Errorf("render summary: %w", err)
