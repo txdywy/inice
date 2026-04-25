@@ -18,7 +18,7 @@ func NewStaticRenderer() *StaticRenderer {
 }
 
 func (r *StaticRenderer) RenderHeader(routerHost string, nodeCount int, coreType string, duration string) {
-	width := 242
+	width := 248
 	fmt.Println(strings.Repeat("─", width))
 	fmt.Printf("  inice - PassWall2 Node Health Report\n")
 	fmt.Printf("  Router: %s | Nodes: %d | Shadow Core: %s | Duration: %s\n", routerHost, nodeCount, coreType, duration)
@@ -27,9 +27,10 @@ func (r *StaticRenderer) RenderHeader(routerHost string, nodeCount int, coreType
 }
 
 func (r *StaticRenderer) RenderTableHeader() {
-	fmt.Println(strings.Repeat("─", 242))
-	// widths: NAME(32) TYPE(10) PROTO(10) ADDRESS(20) PORT(6) LATENCY(8) EXIT IP(16) GEO(4) SCORE(20) GOOGLE(8) NETFLIX(8) CHATGPT(8) GITHUB(8) YOUTUBE(8) TWITTER(8) TELEGRAM(9) INSTAGRAM(10) REDDIT(8) TWITCH(8) IP TYPE(9)
-	fmt.Printf("%s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s\n",
+	fmt.Println(strings.Repeat("─", 248))
+	// widths: RANK(4) NAME(32) TYPE(10) PROTO(10) ADDRESS(20) PORT(6) LATENCY(8) EXIT IP(16) GEO(4) SCORE(20) GOOGLE(8) NETFLIX(8) CHATGPT(8) GITHUB(8) YOUTUBE(8) TWITTER(8) TELEGRAM(9) INSTAGRAM(10) REDDIT(8) TWITCH(8) IP TYPE(9)
+	fmt.Printf("%s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s\n",
+		PadVisual("#", 4, true),
 		PadVisual("NAME", 32, true),
 		PadVisual("TYPE", 10, true),
 		PadVisual("PROTO", 10, true),
@@ -51,7 +52,7 @@ func (r *StaticRenderer) RenderTableHeader() {
 		PadVisual("TWITCH", 8, true),
 		PadVisual("IP TYPE", 9, false),
 	)
-	fmt.Println(strings.Repeat("─", 242))
+	fmt.Println(strings.Repeat("─", 248))
 }
 
 func CalculateScore(res model.TestResult) (int, string) {
@@ -131,7 +132,7 @@ func CalculateScore(res model.TestResult) (int, string) {
 	return finalScore, scoreText
 }
 
-func (r *StaticRenderer) RenderRow(res model.TestResult) {
+func (r *StaticRenderer) RenderRow(res model.TestResult, rank int) {
 	latencyText := fmt.Sprintf("%.0fms", float64(res.Latency.Avg)/float64(time.Millisecond))
 	if res.Latency.Class == model.LatencyPoor && res.Latency.Avg == 0 {
 		latencyText = "ERR"
@@ -158,7 +159,8 @@ func (r *StaticRenderer) RenderRow(res model.TestResult) {
 
 	_, scoreDisplay := CalculateScore(res)
 
-	fmt.Printf("%s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s\n",
+	fmt.Printf("%s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s\n",
+		PadVisual(fmt.Sprintf("%d", rank), 4, true),
 		PadVisual(Truncate(res.Node.Name, 32), 32, true),
 		PadVisual(Truncate(string(res.Node.Type), 10), 10, true),
 		PadVisual(Truncate(string(res.Node.Protocol), 10), 10, true),

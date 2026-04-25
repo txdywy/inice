@@ -25,9 +25,10 @@ func (r *JSONRenderer) RenderTableHeader() {
 	// JSONL doesn't need a table header, but we can print nothing
 }
 
-func (r *JSONRenderer) RenderRow(res model.TestResult) {
+func (r *JSONRenderer) RenderRow(res model.TestResult, rank int) {
 	// Map to jsonResult for clean JSON output
 	out := jsonResult{
+		Rank:          rank,
 		Node:          res.Node,
 		Latency:       res.Latency,
 		ExitIP:        res.ExitIP,
@@ -52,6 +53,7 @@ func (r *JSONRenderer) RenderSummary(results []model.TestResult) error {
 
 // jsonResult is a serializable view of TestResult.
 type jsonResult struct {
+	Rank          int                   `json:"rank"`
 	Node          model.ProxyNode       `json:"node"`
 	Latency       model.LatencyResult   `json:"latency"`
 	ExitIP        model.IPInfo          `json:"exit_ip"`

@@ -256,13 +256,13 @@ func run(cmd *cobra.Command, args []string) error {
 			
 			// 4. Redraw table header and all sorted rows
 			renderer.RenderTableHeader()
-			for _, r := range activeResults {
-				renderer.RenderRow(r)
+			for i, r := range activeResults {
+				renderer.RenderRow(r, i+1)
 			}
 			
 			mu.Unlock()
 		} else {
-			renderer.RenderRow(res)
+			renderer.RenderRow(res, idx+1)
 		}
 	})
 

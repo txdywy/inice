@@ -25,7 +25,7 @@ func (r *CSVRenderer) RenderHeader(routerHost string, nodeCount int, coreType st
 
 func (r *CSVRenderer) RenderTableHeader() {
 	header := []string{
-		"name", "type", "protocol", "address", "port",
+		"rank", "name", "type", "protocol", "address", "port",
 		"latency_ms", "latency_class", "loss_pct",
 		"exit_ip", "country", "isp", "hosting",
 		"google", "github", "netflix", "chatgpt", "youtube", "twitter", "telegram", "instagram", "reddit", "twitch",
@@ -35,7 +35,7 @@ func (r *CSVRenderer) RenderTableHeader() {
 	r.w.Flush()
 }
 
-func (r *CSVRenderer) RenderRow(res model.TestResult) {
+func (r *CSVRenderer) RenderRow(res model.TestResult, rank int) {
 	latencyMs := ""
 	if res.Latency.Avg > 0 {
 		latencyMs = fmt.Sprintf("%.1f", float64(res.Latency.Avg)/float64(time.Millisecond))
@@ -55,6 +55,7 @@ func (r *CSVRenderer) RenderRow(res model.TestResult) {
 	}
 
 	row := []string{
+		fmt.Sprintf("%d", rank),
 		res.Node.Name,
 		string(res.Node.Type),
 		string(res.Node.Protocol),

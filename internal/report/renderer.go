@@ -11,7 +11,7 @@ import (
 type Renderer interface {
 	RenderHeader(routerHost string, nodeCount int, coreType string, duration string)
 	RenderTableHeader()
-	RenderRow(result model.TestResult)
+	RenderRow(result model.TestResult, rank int)
 	RenderSummary(results []model.TestResult) error
 }
 
