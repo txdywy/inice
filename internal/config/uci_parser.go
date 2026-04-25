@@ -162,11 +162,23 @@ func normalizeXrayNode(n model.ProxyNode, props map[string]string) (model.ProxyN
 	n.Transport = getProp("transport")
 	n.WSHost = getProp("ws_host")
 	n.WSPath = getProp("ws_path")
+	if n.Transport == "xhttp" {
+		if path := getProp("xhttp_path"); path != "" {
+			n.WSPath = path
+		}
+		if host := getProp("xhttp_host"); host != "" {
+			n.WSHost = host
+		}
+	}
 	n.SNI = getProp("tls_serverName")
 	if n.SNI == "" {
 		n.SNI = getProp("sni") // another common field name
 	}
+	if getProp("tls_disable_sni") == "1" {
+		n.SNI = ""
+	}
 	n.Fingerprint = getProp("fingerprint")
+	n.Insecure = getProp("tls_allowInsecure") == "1" || getProp("tls_allowInsecure") == "true"
 	n.GRPCServiceName = getProp("grpc_serviceName")
 	n.SSMethod = getProp("ss_method")
 	if n.SSMethod == "" {
