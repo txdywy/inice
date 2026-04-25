@@ -18,7 +18,7 @@ func NewStaticRenderer() *StaticRenderer {
 }
 
 func (r *StaticRenderer) RenderHeader(routerHost string, nodeCount int, coreType string, duration string) {
-	width := 216
+	width := 228
 	fmt.Println(strings.Repeat("─", width))
 	fmt.Printf("  inice - PassWall2 Node Health Report\n")
 	fmt.Printf("  Router: %s | Nodes: %d | Shadow Core: %s | Duration: %s\n", routerHost, nodeCount, coreType, duration)
@@ -27,9 +27,9 @@ func (r *StaticRenderer) RenderHeader(routerHost string, nodeCount int, coreType
 }
 
 func (r *StaticRenderer) RenderTableHeader() {
-	fmt.Println(strings.Repeat("─", 216))
-	// widths: NAME(32) TYPE(10) PROTO(10) ADDRESS(20) PORT(6) LATENCY(8) EXIT IP(16) GEO(4) GOOGLE(8) NETFLIX(8) CHATGPT(8) GITHUB(8) YOUTUBE(8) TWITTER(8) TELEGRAM(9) INSTAGRAM(10) REDDIT(8) TWITCH(8) IP TYPE(9)
-	fmt.Printf("%s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s\n",
+	fmt.Println(strings.Repeat("─", 228))
+	// widths: NAME(32) TYPE(10) PROTO(10) ADDRESS(20) PORT(6) LATENCY(8) EXIT IP(16) GEO(4) SCORE(10) GOOGLE(8) NETFLIX(8) CHATGPT(8) GITHUB(8) YOUTUBE(8) TWITTER(8) TELEGRAM(9) INSTAGRAM(10) REDDIT(8) TWITCH(8) IP TYPE(9)
+	fmt.Printf("%s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s\n",
 		PadVisual("NAME", 32, true),
 		PadVisual("TYPE", 10, true),
 		PadVisual("PROTO", 10, true),
@@ -38,6 +38,7 @@ func (r *StaticRenderer) RenderTableHeader() {
 		PadVisual("LATENCY", 8, true),
 		PadVisual("EXIT IP", 16, true),
 		PadVisual("GEO", 4, true),
+		PadVisual("SCORE", 10, true),
 		PadVisual("GOOGLE", 8, true),
 		PadVisual("NETFLIX", 8, true),
 		PadVisual("CHATGPT", 8, true),
@@ -50,7 +51,52 @@ func (r *StaticRenderer) RenderTableHeader() {
 		PadVisual("TWITCH", 8, true),
 		PadVisual("IP TYPE", 9, false),
 	)
-	fmt.Println(strings.Repeat("─", 216))
+	fmt.Println(strings.Repeat("─", 228))
+}
+
+func calculateScore(res model.TestResult) (int, string) {
+	if res.Latency.Avg == 0 {
+		return 0, ""
+	}
+
+	// Base 1000
+	score := 1000
+	
+	// Latency Penalty: -2 per 1ms
+	score -= int(res.Latency.Avg / (500 * time.Microsecond)) // Roughly -2 per ms
+	
+	// Unlock Bonus: +100 per site
+	probes := []string{
+		res.Streaming.Google, res.Streaming.Netflix, res.Streaming.ChatGPT, 
+		res.Streaming.GitHub, res.Streaming.YouTube, res.Streaming.Twitter,
+		res.Streaming.Telegram, res.Streaming.Instagram, res.Streaming.Reddit, res.Streaming.Twitch,
+	}
+	for _, p := range probes {
+		if strings.HasSuffix(p, "ms") {
+			score += 100
+		}
+	}
+	
+	// Resident bonus
+	if !res.ExitIP.Hosting && res.ExitIP.IP != "" {
+		score += 50
+	}
+
+	trophies := 0
+	switch {
+	case score > 1700:
+		trophies = 5
+	case score > 1400:
+		trophies = 4
+	case score > 1100:
+		trophies = 3
+	case score > 800:
+		trophies = 2
+	case score > 400:
+		trophies = 1
+	}
+
+	return score, strings.Repeat("🏆", trophies)
 }
 
 func (r *StaticRenderer) RenderRow(res model.TestResult) {
@@ -78,7 +124,9 @@ func (r *StaticRenderer) RenderRow(res model.TestResult) {
 		ipType = "-"
 	}
 
-	fmt.Printf("%s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s\n",
+	_, trophies := calculateScore(res)
+
+	fmt.Printf("%s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s\n",
 		PadVisual(Truncate(res.Node.Name, 32), 32, true),
 		PadVisual(Truncate(string(res.Node.Type), 10), 10, true),
 		PadVisual(Truncate(string(res.Node.Protocol), 10), 10, true),
@@ -87,6 +135,7 @@ func (r *StaticRenderer) RenderRow(res model.TestResult) {
 		latencyStr,
 		PadVisual(exitIPStr, 16, true),
 		PadVisual(geoStr, 4, true),
+		PadVisual(trophies, 10, true),
 		StreamingColorStr(res.Streaming.Google, 8),
 		StreamingColorStr(res.Streaming.Netflix, 8),
 		StreamingColorStr(res.Streaming.ChatGPT, 8),
@@ -141,20 +190,11 @@ func (r *StaticRenderer) RenderSummary(results []model.TestResult) error {
 	}
 
 	if len(validResults) > 0 {
-		// Sort by a "score" (primarily avg latency, with penalty for missing unlocks)
+		// Sort by our algorithm
 		sort.Slice(validResults, func(i, j int) bool {
-			score := func(res model.TestResult) float64 {
-				s := float64(res.Latency.Avg)
-				// Small penalty for every ERROR or NO in streaming to favor fully working nodes
-				probes := []string{res.Streaming.Google, res.Streaming.Netflix, res.Streaming.ChatGPT, res.Streaming.YouTube, res.Streaming.GitHub}
-				for _, p := range probes {
-					if p == "ERROR" || p == "NO" || strings.HasPrefix(p, "MAYBE") {
-						s += float64(200 * time.Millisecond)
-					}
-				}
-				return s
-			}
-			return score(validResults[i]) < score(validResults[j])
+			si, _ := calculateScore(validResults[i])
+			sj, _ := calculateScore(validResults[j])
+			return si > sj // Higher score first
 		})
 
 		fmt.Println("\n🏆 TOP 3 BEST NODES")
