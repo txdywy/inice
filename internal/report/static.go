@@ -18,7 +18,7 @@ func NewStaticRenderer() *StaticRenderer {
 }
 
 func (r *StaticRenderer) RenderHeader(routerHost string, nodeCount int, coreType string, duration string) {
-	width := 232
+	width := 242
 	fmt.Println(strings.Repeat("─", width))
 	fmt.Printf("  inice - PassWall2 Node Health Report\n")
 	fmt.Printf("  Router: %s | Nodes: %d | Shadow Core: %s | Duration: %s\n", routerHost, nodeCount, coreType, duration)
@@ -27,8 +27,8 @@ func (r *StaticRenderer) RenderHeader(routerHost string, nodeCount int, coreType
 }
 
 func (r *StaticRenderer) RenderTableHeader() {
-	fmt.Println(strings.Repeat("─", 232))
-	// widths: NAME(32) TYPE(10) PROTO(10) ADDRESS(20) PORT(6) LATENCY(8) EXIT IP(16) GEO(4) SCORE(11) GOOGLE(8) NETFLIX(8) CHATGPT(8) GITHUB(8) YOUTUBE(8) TWITTER(8) TELEGRAM(9) INSTAGRAM(10) REDDIT(8) TWITCH(8) IP TYPE(9)
+	fmt.Println(strings.Repeat("─", 242))
+	// widths: NAME(32) TYPE(10) PROTO(10) ADDRESS(20) PORT(6) LATENCY(8) EXIT IP(16) GEO(4) SCORE(20) GOOGLE(8) NETFLIX(8) CHATGPT(8) GITHUB(8) YOUTUBE(8) TWITTER(8) TELEGRAM(9) INSTAGRAM(10) REDDIT(8) TWITCH(8) IP TYPE(9)
 	fmt.Printf("%s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s\n",
 		PadVisual("NAME", 32, true),
 		PadVisual("TYPE", 10, true),
@@ -38,7 +38,7 @@ func (r *StaticRenderer) RenderTableHeader() {
 		PadVisual("LATENCY", 8, true),
 		PadVisual("EXIT IP", 16, true),
 		PadVisual("GEO", 4, true),
-		PadVisual("PRACTICAL SCORE", 15, true),
+		PadVisual("PRACTICAL SCORE", 20, true),
 		PadVisual("GOOGLE", 8, true),
 		PadVisual("NETFLIX", 8, true),
 		PadVisual("CHATGPT", 8, true),
@@ -51,7 +51,7 @@ func (r *StaticRenderer) RenderTableHeader() {
 		PadVisual("TWITCH", 8, true),
 		PadVisual("IP TYPE", 9, false),
 	)
-	fmt.Println(strings.Repeat("─", 232))
+	fmt.Println(strings.Repeat("─", 242))
 }
 
 func calculateScore(res model.TestResult) (int, string) {
@@ -127,7 +127,7 @@ func calculateScore(res model.TestResult) (int, string) {
 		trophies = 1
 	}
 
-	scoreText := fmt.Sprintf("%d %s", finalScore, strings.Repeat("🏆", trophies))
+	scoreText := fmt.Sprintf("%d/100 %s", finalScore, strings.Repeat("🏆", trophies))
 	return finalScore, scoreText
 }
 
@@ -167,7 +167,7 @@ func (r *StaticRenderer) RenderRow(res model.TestResult) {
 		latencyStr,
 		PadVisual(exitIPStr, 16, true),
 		PadVisual(geoStr, 4, true),
-		PadVisual(scoreDisplay, 15, true),
+		PadVisual(scoreDisplay, 20, true),
 		StreamingColorStr(res.Streaming.Google, 8),
 		StreamingColorStr(res.Streaming.Netflix, 8),
 		StreamingColorStr(res.Streaming.ChatGPT, 8),
@@ -239,20 +239,20 @@ func (r *StaticRenderer) RenderSummary(results []model.TestResult) error {
 			res := validResults[i]
 			medal := []string{"🥇", "🥈", "🥉"}[i]
 			score, trophies := calculateScore(res)
-			// Truncate trophy string prefix (the score part) to just get trophies for the trophies column
+			
+			// Just use trophies without the score prefix for the summary trophies column
 			justTrophies := ""
-			if strings.Contains(trophies, " ") {
-				parts := strings.Split(trophies, " ")
-				if len(parts) > 1 {
-					justTrophies = parts[1]
-				}
+			if parts := strings.Split(trophies, " "); len(parts) > 1 {
+				justTrophies = parts[1]
+			} else {
+				justTrophies = trophies
 			}
 
 			fmt.Printf("%s %s | %s | 评分: %s | Avg: %s | %s %s\n", 
 				medal, 
 				PadVisual(Truncate(res.Node.Name, 32), 32, true),
 				PadVisual(justTrophies, 11, true),
-				PadVisual(fmt.Sprintf("%d", score), 3, false),
+				PadVisual(fmt.Sprintf("%d/100", score), 7, false),
 				PadVisual(fmt.Sprintf("%.0fms", float64(res.Latency.Avg)/float64(time.Millisecond)), 6, false),
 				CountryToEmoji(res.ExitIP.Country),
 				Truncate(res.ExitIP.ISP, 30),
