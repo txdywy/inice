@@ -15,11 +15,12 @@ type Renderer interface {
 	RenderSummary(results []model.TestResult) error
 }
 
-// VisualLength calculates the display width of a string (CJK = 2)
+// VisualLength calculates the display width of a string (CJK and Emoji = 2)
 func VisualLength(s string) int {
 	w := 0
 	for _, r := range s {
-		if r >= 0x1100 && (r <= 0x115f || r == 0x2329 || r == 0x232a ||
+		// Basic Emoji and CJK ranges
+		if (r >= 0x1100 && r <= 0x115f) || r == 0x2329 || r == 0x232a ||
 			(r >= 0x2e80 && r <= 0xa4cf && r != 0x303f) ||
 			(r >= 0xac00 && r <= 0xd7a3) ||
 			(r >= 0xf900 && r <= 0xfaff) ||
@@ -27,8 +28,9 @@ func VisualLength(s string) int {
 			(r >= 0xfe30 && r <= 0xfe6f) ||
 			(r >= 0xff00 && r <= 0xff60) ||
 			(r >= 0xffe0 && r <= 0xffe6) ||
+			(r >= 0x1f000 && r <= 0x1f9ff) || // Emojis
 			(r >= 0x20000 && r <= 0x2fffd) ||
-			(r >= 0x30000 && r <= 0x3fffd)) {
+			(r >= 0x30000 && r <= 0x3fffd) {
 			w += 2
 		} else {
 			w += 1
