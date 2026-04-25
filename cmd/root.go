@@ -199,6 +199,7 @@ func run(cmd *cobra.Command, args []string) error {
 		go func() {
 			spinner := []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 			idx := 0
+			startTime := time.Now()
 			for {
 				select {
 				case <-doneCh:
@@ -214,8 +215,10 @@ func run(cmd *cobra.Command, args []string) error {
 						filled = int(float64(comp) / float64(total) * float64(barLen))
 					}
 					bar := strings.Repeat("█", filled) + strings.Repeat("░", barLen-filled)
+					elapsed := time.Since(startTime).Round(time.Second)
 					
-					fmt.Printf("\r\033[36m%s\033[0m Progress: [\033[32m%s\033[0m] %d/%d ", spinner[idx%len(spinner)], bar, comp, total)
+					fmt.Printf("\r\033[36m%s\033[0m Progress: [\033[32m%s\033[0m] %d/%d | Time: \033[33m%s\033[0m ", 
+						spinner[idx%len(spinner)], bar, comp, total, elapsed)
 					idx++
 				}
 			}
