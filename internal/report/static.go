@@ -28,7 +28,7 @@ func (r *StaticRenderer) RenderHeader(routerHost string, nodeCount int, coreType
 
 func (r *StaticRenderer) RenderTableHeader() {
 	fmt.Println(strings.Repeat("─", 232))
-	// widths: NAME(32) TYPE(10) PROTO(10) ADDRESS(20) PORT(6) LATENCY(8) EXIT IP(16) GEO(4) SCORE(15) GOOGLE(8) NETFLIX(8) CHATGPT(8) GITHUB(8) YOUTUBE(8) TWITTER(8) TELEGRAM(9) INSTAGRAM(10) REDDIT(8) TWITCH(8) IP TYPE(9)
+	// widths: NAME(32) TYPE(10) PROTO(10) ADDRESS(20) PORT(6) LATENCY(8) EXIT IP(16) GEO(4) SCORE(11) GOOGLE(8) NETFLIX(8) CHATGPT(8) GITHUB(8) YOUTUBE(8) TWITTER(8) TELEGRAM(9) INSTAGRAM(10) REDDIT(8) TWITCH(8) IP TYPE(9)
 	fmt.Printf("%s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s\n",
 		PadVisual("NAME", 32, true),
 		PadVisual("TYPE", 10, true),
@@ -230,7 +230,7 @@ func (r *StaticRenderer) RenderSummary(results []model.TestResult) error {
 		})
 
 		fmt.Println("\n🏆 TOP 3 PRIMARY NODES (Practical Comprehensive Ranking)")
-		fmt.Println("────────────────────────────────────────────────────────")
+		fmt.Println("────────────────────────────────────────────────────────────────────────")
 		limit := 3
 		if len(validResults) < limit {
 			limit = len(validResults)
@@ -239,12 +239,21 @@ func (r *StaticRenderer) RenderSummary(results []model.TestResult) error {
 			res := validResults[i]
 			medal := []string{"🥇", "🥈", "🥉"}[i]
 			score, trophies := calculateScore(res)
-			fmt.Printf("%s %-32s | %-11s | 评分: %-3d | Avg: %-6s | %s %s\n", 
+			// Truncate trophy string prefix (the score part) to just get trophies for the trophies column
+			justTrophies := ""
+			if strings.Contains(trophies, " ") {
+				parts := strings.Split(trophies, " ")
+				if len(parts) > 1 {
+					justTrophies = parts[1]
+				}
+			}
+
+			fmt.Printf("%s %s | %s | 评分: %s | Avg: %s | %s %s\n", 
 				medal, 
-				Truncate(res.Node.Name, 32),
-				trophies,
-				score,
-				fmt.Sprintf("%.0fms", float64(res.Latency.Avg)/float64(time.Millisecond)),
+				PadVisual(Truncate(res.Node.Name, 32), 32, true),
+				PadVisual(justTrophies, 11, true),
+				PadVisual(fmt.Sprintf("%d", score), 3, false),
+				PadVisual(fmt.Sprintf("%.0fms", float64(res.Latency.Avg)/float64(time.Millisecond)), 6, false),
 				CountryToEmoji(res.ExitIP.Country),
 				Truncate(res.ExitIP.ISP, 30),
 			)
