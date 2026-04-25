@@ -153,6 +153,9 @@ func normalizeXrayNode(n model.ProxyNode, props map[string]string) (model.ProxyN
 	
 	tlsVal := getProp("tls")
 	n.TLS = tlsVal == "1" || tlsVal == "true"
+	if n.Protocol == model.ProtoTrojan {
+		n.TLS = true
+	}
 	
 	realityVal := getProp("reality")
 	n.Reality = realityVal == "1" || realityVal == "true"
@@ -210,7 +213,7 @@ func normalizeSingBoxNode(n model.ProxyNode, props map[string]string) (model.Pro
 	n.Password = props["password"]
 	n.Username = props["username"]
 	n.TLS = props["tls"] == "1" || props["tls"] == "true"
-	if n.Protocol == model.ProtoAnyTLS || n.Protocol == model.ProtoTUIC || n.Protocol == model.ProtoHysteria2 {
+	if n.Protocol == model.ProtoAnyTLS || n.Protocol == model.ProtoTUIC || n.Protocol == model.ProtoHysteria2 || n.Protocol == model.ProtoTrojan {
 		n.TLS = true
 	}
 	n.Reality = props["reality"] == "1" || props["reality"] == "true"

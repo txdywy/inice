@@ -51,8 +51,7 @@ func GenerateSingboxConfig(nodes []model.ProxyNode, portMap map[int]int) ([]byte
 		"inbounds":  inbounds,
 		"outbounds": outbounds,
 		"route": map[string]interface{}{
-			"rules":                 rules,
-			"auto_detect_interface": true,
+			"rules": rules,
 		},
 	}
 
