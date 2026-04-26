@@ -18,7 +18,7 @@ func NewStaticRenderer() *StaticRenderer {
 }
 
 func (r *StaticRenderer) RenderHeader(routerHost string, nodeCount int, coreType string, duration string) {
-	width := 248
+	width := 259
 	fmt.Println(strings.Repeat("─", width))
 	fmt.Printf("  inice - PassWall2 Node Health Report\n")
 	fmt.Printf("  Router: %s | Nodes: %d | Shadow Core: %s | Duration: %s\n", routerHost, nodeCount, coreType, duration)
@@ -27,8 +27,8 @@ func (r *StaticRenderer) RenderHeader(routerHost string, nodeCount int, coreType
 }
 
 func (r *StaticRenderer) RenderTableHeader() {
-	fmt.Println(strings.Repeat("─", 248))
-	// widths: RANK(4) NAME(32) TYPE(10) PROTO(10) ADDRESS(20) PORT(6) LATENCY(8) EXIT IP(16) GEO(4) SCORE(20) GOOGLE(8) NETFLIX(8) CHATGPT(8) GITHUB(8) YOUTUBE(8) TWITTER(8) TELEGRAM(9) INSTAGRAM(10) REDDIT(8) TWITCH(8) IP TYPE(9)
+	fmt.Println(strings.Repeat("─", 259))
+	// widths: RANK(4) NAME(32) TYPE(10) PROTO(10) ADDRESS(20) PORT(6) LATENCY(8) EXIT IP(16) GEO(4) SCORE(20) GOOGLE(8) NETFLIX(8) CHATGPT(8) GITHUB(8) YOUTUBE(8) TWITTER(8) TELEGRAM(9) INSTAGRAM(10) REDDIT(8) TWITCH(8) ORG(20)
 	fmt.Printf("%s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s\n",
 		PadVisual("#", 4, true),
 		PadVisual("NAME", 32, true),
@@ -50,9 +50,9 @@ func (r *StaticRenderer) RenderTableHeader() {
 		PadVisual("INSTAGRAM", 10, true),
 		PadVisual("REDDIT", 8, true),
 		PadVisual("TWITCH", 8, true),
-		PadVisual("IP TYPE", 9, false),
+		PadVisual("ORG", 20, false),
 	)
-	fmt.Println(strings.Repeat("─", 248))
+	fmt.Println(strings.Repeat("─", 259))
 }
 
 func CalculateScore(res model.TestResult) (int, string) {
@@ -149,12 +149,9 @@ func (r *StaticRenderer) RenderRow(res model.TestResult, rank int) {
 		geoStr = CountryToEmoji(res.ExitIP.Country)
 	}
 
-	ipType := "RESIDENT"
-	if res.ExitIP.Hosting {
-		ipType = "HOSTING"
-	}
-	if res.ExitIP.IP == "" {
-		ipType = "-"
+	orgStr := "-"
+	if res.ExitIP.ISP != "" {
+		orgStr = res.ExitIP.ISP
 	}
 
 	_, scoreDisplay := CalculateScore(res)
@@ -180,7 +177,7 @@ func (r *StaticRenderer) RenderRow(res model.TestResult, rank int) {
 		StreamingColorStr(res.Streaming.Instagram, 10),
 		StreamingColorStr(res.Streaming.Reddit, 8),
 		StreamingColorStr(res.Streaming.Twitch, 8),
-		PadVisual(ipType, 9, false),
+		PadVisual(Truncate(orgStr, 20), 20, false),
 	)
 }
 
